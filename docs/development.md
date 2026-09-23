@@ -39,6 +39,36 @@ updates. They do not establish runtime authentication correctness. Authenticatio
 migration, and browser regression checks live under `tests/`. Remaining fixes,
 investigations, and deferred features are tracked in the repository's root `TODO.md`.
 
+## Dependency vulnerability audits
+
+`Directory.Build.props` explicitly enables NuGet auditing of direct and transitive
+packages for both the plugin and its tests. `NuGet.Config` selects NuGet's public
+audit feed. All severities fail restore (`NU1901`–`NU1904`); unavailable or invalid
+audit data also fails (`NU1900`, `NU1905`). Do not treat an unavailable feed as a
+clean scan or suppress an advisory without a documented applicability review.
+See [NuGet's audit configuration](https://learn.microsoft.com/en-us/nuget/concepts/auditing-packages).
+
+Reproduce the CI audit with the supported SDK:
+
+```sh
+dotnet restore SSO-Auth.sln --force-evaluate --no-http-cache
+dotnet list SSO-Auth.sln package --vulnerable --include-transitive --format json --output-version 1 --no-restore
+```
+
+The restore exit status enforces the policy; the package-list command provides a
+report, not a vulnerability failure gate. CI retains its restore log, JSON report,
+and resolved `project.assets.json` graphs in `dependency-audit` for 30 days,
+including when the audit fails. Advisory data changes over time; a passing result
+only describes that scan. The existing package and host tests still gate releases.
+
+When dependencies change, review the package allowlist in `scripts/release.py`,
+the resolved graphs, and `host-dependency-evidence`. The host harness records
+SHA-256 hashes for every packaged DLL and the DLL paths/hashes actually mapped
+by each exercised Jellyfin host in `dist/dependency-evidence/`. This distinguishes
+host-provided assemblies from package copies; a DLL not exercised by these flows
+is not certified as loaded. Review unexpected host overrides or missing dependencies
+before release. Evidence contains assembly paths/hashes, not host logs or tokens.
+
 ## Build a local package
 
 From the repository root:

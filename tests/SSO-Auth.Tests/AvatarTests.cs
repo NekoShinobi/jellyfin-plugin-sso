@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Http.Headers;
 using Jellyfin.Plugin.SSO_Auth.Services;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Drawing;
@@ -16,6 +17,7 @@ public class AvatarTests
     private sealed class Download : HttpMessageHandler, IHttpClientFactory
     {
         public readonly ConcurrentQueue<string> Requests = new();
+        public Func<HttpRequestMessage, HttpResponseMessage>? Respond;
         public HttpClient CreateClient(string name)
         {
             Assert.Equal("sso-avatar", name);
@@ -26,6 +28,7 @@ public class AvatarTests
         {
             Requests.Enqueue(request.RequestUri!.AbsolutePath);
             if (request.RequestUri.AbsolutePath == "/failure") throw new HttpRequestException("Synthetic failure");
+            if (Respond is not null) return Task.FromResult(Respond(request));
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 0]),
@@ -39,15 +42,19 @@ public class AvatarTests
         public readonly Download Http = new();
         public readonly AvatarService Service;
         public readonly Mock<IImageEncoder> Decoder = new();
+        public readonly Mock<IProviderManager> Images = new();
 
         public Fixture()
         {
             Decoder.Setup(d => d.GetImageSize(It.IsAny<string>())).Returns(new ImageDimensions(1, 1));
-            var images = new Mock<IProviderManager>();
-            images.Setup(i => i.SaveImage(It.IsAny<Stream>(), "image/png", It.IsAny<string>())).Returns(Task.CompletedTask);
+            Images.Setup(i => i.SaveImage(It.IsAny<Stream>(), "image/png", It.IsAny<string>())).Returns(async (Stream input, string mime, string path) =>
+            {
+                await using var output = File.Create(path);
+                await input.CopyToAsync(output);
+            });
             var server = new Mock<IServerConfigurationManager>();
             server.Setup(s => s.ApplicationPaths.UserConfigurationDirectoryPath).Returns(Directory);
-            Service = new(Decoder.Object, images.Object, server.Object, Http, NullLogger<AvatarService>.Instance);
+            Service = new(Decoder.Object, Images.Object, server.Object, Http, NullLogger<AvatarService>.Instance);
         }
 
         public void Dispose()
@@ -103,6 +110,163 @@ public class AvatarTests
         await f.Service.Refresh(user, "https://avatar.test/" + (commitFailure ? "image" : "failure"), _ => throw new IOException("Synthetic persistence failure"));
         await f.Service.Refresh(user, "https://avatar.test/retry", _ => { commits++; return Task.CompletedTask; }).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(1, commits);
+    }
+
+    private static HttpResponseMessage Image(byte variant = 0, string? etag = "\"v1\"")
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, variant]),
+        };
+        if (etag is not null) response.Headers.ETag = EntityTagHeaderValue.Parse(etag);
+        return response;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ValidatorsAvoidDownloadingAndRewritingUnchangedImages(bool etag)
+    {
+        using var f = new Fixture();
+        var user = Guid.NewGuid();
+        var modified = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+        var calls = 0;
+        var validators = new List<(string? ETag, DateTimeOffset? Modified)>();
+        f.Http.Respond = request =>
+        {
+            validators.Add((request.Headers.IfNoneMatch.FirstOrDefault()?.ToString(), request.Headers.IfModifiedSince));
+            if (++calls == 1)
+            {
+                Assert.Empty(request.Headers.IfNoneMatch);
+                Assert.Null(request.Headers.IfModifiedSince);
+                var response = Image(etag: etag ? "W/\"v1\"" : null);
+                response.Content.Headers.LastModified = modified;
+                return response;
+            }
+            if (etag)
+            {
+                Assert.Equal("W/\"v1\"", Assert.Single(request.Headers.IfNoneMatch).ToString());
+                Assert.Null(request.Headers.IfModifiedSince);
+            }
+            else Assert.Equal(modified, request.Headers.IfModifiedSince);
+            return new HttpResponseMessage(HttpStatusCode.NotModified);
+        };
+        var commits = 0;
+        for (var i = 0; i < 3; i++)
+            await f.Service.Refresh(user, "https://avatar.test/image", _ => { commits++; return Task.CompletedTask; });
+        Assert.Equal(3, calls);
+        Assert.Equal((null, (DateTimeOffset?)null), validators[0]);
+        Assert.All(validators.Skip(1), value => Assert.Equal(etag ? ("W/\"v1\"", (DateTimeOffset?)null) : (null, modified), value));
+        Assert.Equal(1, commits);
+        f.Decoder.Verify(d => d.GetImageSize(It.IsAny<string>()), Times.Once);
+        f.Images.Verify(i => i.SaveImage(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task IdenticalBytesWithoutValidatorsAvoidImageAndMetadataWrites()
+    {
+        using var f = new Fixture();
+        f.Http.Respond = _ => Image(etag: null);
+        var user = Guid.NewGuid();
+        var commits = 0;
+        for (var i = 0; i < 2; i++)
+            await f.Service.Refresh(user, "https://avatar.test/image", _ => { commits++; return Task.CompletedTask; });
+        Assert.Equal(2, f.Http.Requests.Count);
+        Assert.Equal(1, commits);
+        f.Decoder.Verify(d => d.GetImageSize(It.IsAny<string>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("url")]
+    [InlineData("user")]
+    [InlineData("missing")]
+    [InlineData("no-store")]
+    public async Task ValidatorsAreOnlyReusedForTheSameUserUrlAndExistingCacheableImage(string change)
+    {
+        using var f = new Fixture();
+        var user = Guid.NewGuid();
+        string? path = null;
+        f.Http.Respond = _ =>
+        {
+            var response = Image();
+            if (change == "no-store") response.Headers.CacheControl = new CacheControlHeaderValue { NoStore = true };
+            return response;
+        };
+        await f.Service.Refresh(user, "https://avatar.test/image", value => { path = value; return Task.CompletedTask; });
+        Assert.NotNull(path);
+        if (change == "missing") File.Delete(path);
+        f.Http.Respond = request =>
+        {
+            Assert.Empty(request.Headers.IfNoneMatch);
+            Assert.Null(request.Headers.IfModifiedSince);
+            return Image();
+        };
+        var committed = false;
+        await f.Service.Refresh(change == "user" ? Guid.NewGuid() : user,
+            change == "url" ? "https://avatar.test/changed" : "https://avatar.test/image",
+            _ => { committed = true; return Task.CompletedTask; });
+        Assert.True(committed);
+    }
+
+    [Theory]
+    [InlineData("download")]
+    [InlineData("decode")]
+    [InlineData("write")]
+    [InlineData("commit")]
+    public async Task FailedReplacementPreservesPreviousUsableImageAndValidators(string failure)
+    {
+        using var f = new Fixture();
+        var user = Guid.NewGuid();
+        string? current = null;
+        f.Http.Respond = _ => Image();
+        await f.Service.Refresh(user, "https://avatar.test/image", path => { current = path; return Task.CompletedTask; });
+        Assert.NotNull(current);
+        var original = await File.ReadAllBytesAsync(current);
+        var originalPath = current;
+        f.Http.Respond = _ => failure == "download" ? new HttpResponseMessage(HttpStatusCode.BadGateway) : Image(1, "\"v2\"");
+        if (failure == "decode") f.Decoder.Setup(d => d.GetImageSize(It.IsAny<string>())).Throws(new IOException());
+        if (failure == "write") f.Images.Setup(i => i.SaveImage(It.IsAny<Stream>(), "image/png", It.IsAny<string>()))
+            .Returns((Stream input, string mime, string path) => { File.WriteAllText(path, "partial"); throw new IOException(); });
+        await f.Service.Refresh(user, "https://avatar.test/image", _ => throw new IOException("Commit failed"));
+        Assert.Equal(originalPath, current);
+        Assert.Equal(original, await File.ReadAllBytesAsync(current));
+        Assert.Single(System.IO.Directory.GetFiles(Path.GetDirectoryName(current)!));
+        var checkedValidator = false;
+        f.Http.Respond = request =>
+        {
+            Assert.Equal("\"v1\"", Assert.Single(request.Headers.IfNoneMatch).ToString());
+            checkedValidator = true;
+            return new HttpResponseMessage(HttpStatusCode.NotModified);
+        };
+        await f.Service.Refresh(user, "https://avatar.test/image", _ => throw new InvalidOperationException("Unchanged"));
+        Assert.True(checkedValidator);
+    }
+
+    [Fact]
+    public async Task SuccessfulReplacementPublishesNewFileBeforeRemovingOldOwnedFiles()
+    {
+        using var f = new Fixture();
+        var user = Guid.NewGuid();
+        string? previous = null;
+        f.Http.Respond = _ => Image();
+        await f.Service.Refresh(user, "https://avatar.test/image", path => { previous = path; return Task.CompletedTask; });
+        Assert.NotNull(previous);
+        var manual = Path.Combine(Path.GetDirectoryName(previous)!, "profile.png");
+        await File.WriteAllTextAsync(manual, "preserve manual image");
+        f.Http.Respond = _ => Image(1, "\"v2\"");
+        string? replacement = null;
+        await f.Service.Refresh(user, "https://avatar.test/image", path =>
+        {
+            Assert.NotEqual(previous, path);
+            Assert.True(File.Exists(previous));
+            Assert.Equal(1, File.ReadAllBytes(path)[^1]);
+            replacement = path;
+            return Task.CompletedTask;
+        });
+        Assert.NotNull(replacement);
+        Assert.True(File.Exists(replacement));
+        Assert.False(File.Exists(previous));
+        Assert.Equal("preserve manual image", await File.ReadAllTextAsync(manual));
     }
 
     [Theory]

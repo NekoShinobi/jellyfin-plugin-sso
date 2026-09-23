@@ -5,6 +5,7 @@ Run: python3 tests/host_smoke.py --archive dist/SSO-Auth_5.0.0.0.zip --playwrigh
 """
 import argparse
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -67,7 +68,30 @@ def seed_legacy_avatar(base, token, config, name):
     docker("start", name)
     return {"userId": user["Id"], "legacyPath": legacy.relative_to(config).as_posix()}, png
 
-def run(version, archive, playwright):
+def dependency_evidence(name, version, archive, evidence_dir):
+    """Record package bytes and DLLs actually mapped by the exercised Linux host."""
+    with zipfile.ZipFile(archive) as bundle:
+        packaged = {path: hashlib.sha256(bundle.read(path)).hexdigest()
+                    for path in bundle.namelist() if path.endswith('.dll')}
+    maps = docker("exec", name, "cat", "/proc/1/maps")
+    paths = sorted({line.split(maxsplit=5)[5] for line in maps.splitlines()
+                    if len(line.split(maxsplit=5)) == 6 and line.endswith('.dll')})
+    assert any(Path(path).name == 'SSO-Auth.dll' for path in paths), "Plugin assembly was not mapped by the host"
+    loaded = []
+    for line in docker("exec", name, "sha256sum", *paths).splitlines():
+        digest, path = line.split(maxsplit=1)
+        loaded.append({"path": path, "sha256": digest,
+                       "matchesPackage": packaged.get(Path(path).name) == digest})
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    (evidence_dir / f"host-{version}-assemblies.json").write_text(json.dumps({
+        "host": version, "archive": archive.name,
+        "archiveSha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        "packaged": packaged, "loaded": loaded,
+    }, indent=2) + "\n")
+    print(f"{version}: recorded {len(packaged)} packaged and {len(loaded)} host-mapped assemblies", flush=True)
+
+
+def run(version, archive, playwright, evidence_dir):
     name = "sso-rewrite-" + version.replace('.', '-') + '-' + secrets.token_hex(3)
     with tempfile.TemporaryDirectory(prefix="sso-integration-") as directory:
         root = Path(directory)
@@ -115,6 +139,7 @@ def run(version, archive, playwright):
             state.chmod(0o600)
             result = docker("run", "--rm", "--network", "host", "-v", f"{ROOT}:/work:ro", "-v", f"{root}:/test", "-v", f"{playwright}:/driver:ro", "mcr.microsoft.com/playwright:v1.56.0-noble", "node", "/work/tests/host-browser.mjs", "/test/state.json")
             print(version + ': ' + result, flush=True)
+            dependency_evidence(name, version, archive, evidence_dir)
             legacy_user = next(user for user in api(base, "/Users", token=token) if user["Name"] == "browser-user")
             legacy_policy = legacy_user["Policy"].copy()
             legacy_policy["AuthenticationProviderId"] = "Jellyfin.Plugin.SSO_Auth.Api.SSOController"
@@ -169,7 +194,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--playwright', type=Path, required=True)
+    parser.add_argument('--evidence-dir', type=Path, default=ROOT / 'dist/dependency-evidence')
     parser.add_argument('--versions', nargs='+', default=['12.0', '12.1'])
     args = parser.parse_args()
     for version in args.versions:
-        run(version, args.archive.resolve(), args.playwright.resolve())
+        run(version, args.archive.resolve(), args.playwright.resolve(), args.evidence_dir.resolve())

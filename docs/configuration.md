@@ -229,6 +229,19 @@ body limit, and a 4096 × 4096 image limit. Only public addresses and PNG/JPEG/W
 images are accepted; redirects, proxies, and private/loopback addresses are rejected.
 Image failures do not prevent login.
 
+Repeated sign-ins revalidate an unchanged URL using ETag (preferred) or
+Last-Modified when the origin supplies them. A `304` skips the image download,
+decoding, and profile update. Origins without validators still require a download,
+but identical bytes skip decoding and writes. The in-memory cache holds at most
+1024 users, honors `Cache-Control: no-store`, and is cleared on restart. A changed
+URL or missing local image requires a full download.
+
+Replacements are validated and saved to a new file before the account reference
+changes. Download, decoding, file-write, or metadata-save failures preserve the
+previous usable image. After a successful replacement, older `profile-sso-*`
+files are removed; manually uploaded and legacy recovery images are left alone.
+The public-address, redirect, size, timeout, and redacted-logging rules still apply.
+
 On successful SSO sign-in, the plugin also repairs known legacy avatar filenames
 (`profilepng`, `profilejpg`, `profilejpeg`, and `profilewebp`). It checks the file
 contents and image dimensions, saves a correctly named copy, and updates the

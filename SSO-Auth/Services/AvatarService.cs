@@ -5,7 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Configuration;
@@ -26,6 +28,8 @@ public interface IAvatarService
 public sealed class AvatarService(IImageEncoder decoder, IProviderManager images, IServerConfigurationManager server, IHttpClientFactory clients, ILogger<AvatarService> logger) : IAvatarService
 {
     private const int MaxImageBytes = 2 * 1024 * 1024;
+    private const int MaxCachedUsers = 1024;
+    private readonly Dictionary<Guid, CachedImage> _cache = new();
     private readonly object _refreshGate = new();
     private readonly Dictionary<Guid, RefreshLock> _refreshes = new();
 
@@ -110,6 +114,7 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
 
     private async Task RefreshCore(Guid userId, string url, Func<string, Task> saveProfileImage)
     {
+        string? uncommitted = null;
         try
         {
             if (url.Length > 2048 || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.UserInfo.Length != 0)
@@ -117,9 +122,42 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
                 throw new InvalidOperationException();
             }
 
+            CachedImage? cached;
+            lock (_refreshGate)
+            {
+                _cache.TryGetValue(userId, out cached);
+            }
+
+            if (cached?.Url != url || !File.Exists(cached.Path))
+            {
+                cached = null;
+            }
+
             using var client = clients.CreateClient("sso-avatar");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            if (cached?.ETag is not null)
+            {
+                request.Headers.IfNoneMatch.Add(cached.ETag);
+            }
+            else if (cached?.LastModified is not null)
+            {
+                request.Headers.IfModifiedSince = cached.LastModified;
+            }
+
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.NotModified && cached is not null
+                && (cached.ETag is not null || cached.LastModified is not null))
+            {
+                var revalidated = cached with
+                {
+                    ETag = response.Headers.ETag ?? cached.ETag,
+                    LastModified = response.Content.Headers.LastModified ?? cached.LastModified,
+                };
+                Remember(userId, revalidated, response);
+                return;
+            }
+
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > MaxImageBytes)
             {
@@ -128,8 +166,20 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
 
             await using var input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
             var bytes = await ReadImage(input, timeout.Token).ConfigureAwait(false);
+            var digest = Convert.ToHexString(SHA256.HashData(bytes));
+            if (cached?.Digest == digest)
+            {
+                Remember(userId, cached with { ETag = response.Headers.ETag, LastModified = response.Content.Headers.LastModified }, response);
+                return;
+            }
+
             var format = ImageFormat(bytes);
             var directory = Path.Combine(server.ApplicationPaths.UserConfigurationDirectoryPath, userId.ToString("N"));
+            if (new DirectoryInfo(directory).LinkTarget is not null)
+            {
+                throw new InvalidOperationException();
+            }
+
             Directory.CreateDirectory(directory);
             var temporary = Path.Combine(directory, Guid.NewGuid().ToString("N") + "." + format.Extension);
             try
@@ -142,15 +192,62 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
                 File.Delete(temporary);
             }
 
-            var path = Path.Combine(directory, "profile." + format.Extension);
+            // Never overwrite the currently referenced image, even if SaveImage or
+            // the metadata commit fails midway. Publish the new reference last.
+            var path = Path.Combine(directory, "profile-sso-" + Guid.NewGuid().ToString("N") + "." + format.Extension);
+            uncommitted = path;
             using var output = new MemoryStream(bytes, writable: false);
             await images.SaveImage(output, format.Mime, path).ConfigureAwait(false);
             await saveProfileImage(path).ConfigureAwait(false);
+            uncommitted = null;
+            Remember(userId, new CachedImage(url, path, digest, response.Headers.ETag, response.Content.Headers.LastModified), response);
+            // Only files owned by this refresh implementation are eligible for cleanup.
+            foreach (var previous in Directory.EnumerateFiles(directory, "profile-sso-*"))
+            {
+                if (previous != path)
+                {
+                    File.Delete(previous);
+                }
+            }
         }
         catch (Exception)
         {
             // No URL, claims, or response body in logs; optional images never fail login.
-            logger.LogWarning("SSO avatar refresh failed validation or download.");
+            logger.LogWarning("SSO avatar refresh failed validation, download, or persistence.");
+        }
+        finally
+        {
+            if (uncommitted is not null)
+            {
+                try
+                {
+                    File.Delete(uncommitted);
+                }
+                catch (Exception)
+                {
+                    logger.LogWarning("SSO could not remove an uncommitted avatar replacement.");
+                }
+            }
+        }
+    }
+
+    private void Remember(Guid userId, CachedImage image, HttpResponseMessage response)
+    {
+        lock (_refreshGate)
+        {
+            _cache.Remove(userId);
+            if (response.Headers.CacheControl?.NoStore == true)
+            {
+                return;
+            }
+
+            // Validators are an optional, bounded process-local optimization.
+            if (_cache.Count >= MaxCachedUsers)
+            {
+                _cache.Remove(_cache.Keys.First());
+            }
+
+            _cache.Add(userId, image);
         }
     }
 
@@ -284,6 +381,8 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
             }
         },
     };
+
+    private sealed record CachedImage(string Url, string Path, string Digest, EntityTagHeaderValue? ETag, DateTimeOffset? LastModified);
 
     private sealed class RefreshLock
     {

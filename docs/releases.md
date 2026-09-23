@@ -2,7 +2,7 @@
 
 ## Release workflow
 
-The release flow follows `jellyfin-plugin-screenshot`:
+The release workflow builds, tests, and publishes the plugin:
 
 1. Pull requests and pushes to `main` build the plugin and upload a package
    artifact retained for 30 days.
@@ -20,7 +20,7 @@ manual runs on other branches cannot publish releases.
 !!! warning "Main builds publish releases"
 
     Each main build is a normal release, including documentation-only changes,
-    just as in the reference workflow; there is no separate nightly channel.
+    and there is no separate nightly channel.
 
 Only one server target is built: Jellyfin 12.0, target ABI `12.0.0.0`, on .NET 10.
 The version starts at 5.x so it sorts above upstream's 4.x packages. Keep all four
@@ -74,3 +74,41 @@ and the [Zensical configuration reference](https://zensical.org/docs/setup/basic
 The repository's private vulnerability reporting should also be enabled before
 inviting security reports. No release or Pages deployment is created merely by
 running the local build commands.
+
+## Verification record
+
+Public checks on **2026-09-23** confirmed:
+
+- [Private vulnerability reporting](https://api.github.com/repos/NekoShinobi/jellyfin-plugin-sso/private-vulnerability-reporting)
+  is enabled for this fork.
+- The `github-pages` environment exists and its deployment branch policy permits
+  `main`. The latest documentation deployment succeeded, and the published site
+  serves the SSO documentation.
+- The build/release workflow requests `contents: write` only for publishing.
+  A successful `main` run published
+  [5.0.0.6](https://github.com/NekoShinobi/jellyfin-plugin-sso/releases/tag/5.0.0.6)
+  and updated the public catalog, demonstrating effective publishing access.
+- The downloaded ZIP's plugin identity, version, and target ABI match
+  [the published catalog](https://raw.githubusercontent.com/NekoShinobi/jellyfin-plugin-sso/main/manifest.json).
+  The catalog's MD5 and both downloadable checksum files match the ZIP bytes.
+  Its SHA-256 is
+  `FD377387897E032A5C70D970A235DDBEFF6768CBDFCBA3741B02F353F3BC2B26`.
+
+The maintainer confirmed the remaining repository settings on **2026-09-23**:
+Pages uses **GitHub Actions**, and default workflow permissions are **Read repository
+contents and packages permissions**. These defaults are compatible with the
+publishing job's explicit `contents: write` permission. No settings changes were
+needed.
+
+For future verification, an administrator can inspect these settings with
+read-only requests:
+
+```sh
+gh api repos/NekoShinobi/jellyfin-plugin-sso/pages
+gh api repos/NekoShinobi/jellyfin-plugin-sso/actions/permissions/workflow
+```
+
+Expect Pages `build_type` to be `workflow`. Check workflow defaults against the
+explicit job permissions above; default `read` is compatible with an explicitly
+granted publishing job. Repeat the public catalog/ZIP/checksum comparison after
+release workflow changes; local packaging alone does not verify publication.
