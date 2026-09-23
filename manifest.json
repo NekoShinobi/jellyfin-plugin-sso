@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/NekoShinobi/jellyfin-plugin-sso/main/img/sso-icon.png",
     "versions": [
       {
+        "version": "5.0.0.6",
+        "targetAbi": "12.0.0.0",
+        "changelog": "Redesign permission editor, preview, and account pages\n\nPermission editor\n- Replace the \"Edit permissions for\" dropdown with one rule list:\n  Everyone first, then groups, a divider, then user overrides. Each\n  row shows a one-line summary; the selected rule opens in a card\n  below the list.\n\nPreview\n- Show \"When <user> signs in\" with matching groups, whether a user\n  override applies, and only the permissions that change (before ->\n  after, with the responsible rule).\n- Show libraries as tags marking added and removed ones, including\n  losing \"All libraries\" (new CurrentAll field in the preview response).\n- Fold the full permission table under \"All permissions\" and drop the\n  explanatory footer note from the UI and the API response.\n\nSign-in completion page\n- Center the page with the Jellyfin logo, a spinner, and success or\n  error states styled like the Jellyfin 12 web client.\n\nAccount connections\n- Record the provider username, issuer, link time, and last sign-in for\n  each verified link (SubjectLinkDetails). Preserve them across\n  dashboard saves, prune them with their link, and remove them on unlink.\n- Add ?details=true to the links endpoint and show these details, plus\n  the groups from the last sign-in, on the linking page.\n- Add a user settings menu entry for Account connections through the\n  File Transformation plugin, only when it is installed.\n- Allow same-origin images in the standalone pages' CSP for the logo.\n\nTests and docs\n- Cover link details and the menu script; update browser tests for the\n  rule list, the new preview, and the completion text; check the linking\n  page shows account details.\n- Document the rule list, the preview, linking details, the menu entry,\n  and the links ?details=true option.\n\nValidate provider settings and resolve SSO follow-ups\n\n  - Preserve original sign-in errors when logout cleanup fails\n  - Diagnose missing and invalid SAML certificates\n  - Validate enabled provider settings and callback ports before saving\n  - Preserve legacy configurations, port sentinels, and disabled drafts\n  - Support whole-URL avatar claims and trim fallback provider IDs\n  - Add opt-in ZITADEL role mapping scoped to allowed organizations\n  - Update documentation, regression tests, and TODO completion status\n",
+        "checksum": "C1AB1B8A393BF70CDAF79176E42C5B9D",
+        "sourceUrl": "https://github.com/NekoShinobi/jellyfin-plugin-sso/releases/download/5.0.0.6/SSO-Auth_5.0.0.6.zip",
+        "timestamp": "2026-09-23T07:31:18Z"
+      },
+      {
         "version": "5.0.0.5",
         "targetAbi": "12.0.0.0",
         "changelog": "fix: docs regarding migration, and remove unused code.\n",
