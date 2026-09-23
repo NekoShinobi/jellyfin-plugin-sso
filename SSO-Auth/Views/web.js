@@ -43,7 +43,14 @@ export function saveLogin(
   baseUrl,
   storage = localStorage,
 ) {
-  if (result.ServerId !== info.Id || !result.AccessToken || !result.User?.Id)
+  if (
+    typeof result?.ServerId !== "string" ||
+    !result.ServerId ||
+    result.ServerId !== info.Id ||
+    !validToken(result.AccessToken) ||
+    typeof result.User?.Id !== "string" ||
+    !result.User.Id
+  )
     throw new Error("Jellyfin returned an unexpected login response.");
   let server = serverEntry(credentials, info, baseUrl);
   if (!server) {
@@ -85,8 +92,12 @@ export async function request(url, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+function validToken(token) {
+  return typeof token === "string" && /^[A-Za-z0-9_-]+$/.test(token);
+}
+
 export function authHeader(token) {
-  if (!/^[A-Za-z0-9_-]+$/.test(token || ""))
+  if (!validToken(token))
     throw new Error(
       "Your Jellyfin session is missing or invalid. Sign in first.",
     );

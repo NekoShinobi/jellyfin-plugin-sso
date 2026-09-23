@@ -11,6 +11,8 @@ import {
 const status = document.querySelector("#status");
 const title = document.querySelector("#completion-title");
 const continueLink = document.querySelector("#continue");
+const backLink = document.querySelector("#back");
+const show = (state) => (document.body.dataset.state = state);
 try {
   const data = JSON.parse(document.querySelector("#sso-data").textContent);
   const baseUrl = location.origin + data.basePath;
@@ -37,9 +39,10 @@ try {
         body: JSON.stringify({ ...client, Data: data.code }),
       },
     );
+    show("success");
     title.textContent = "Account connected";
     status.textContent =
-      "Account linked. Your Jellyfin session and permissions have been preserved.";
+      "You can now sign in to this account with your identity provider.";
     continueLink.href = `${baseUrl}/SSOViews/linking`;
     continueLink.textContent = "Manage connections";
     continueLink.hidden = false;
@@ -55,22 +58,28 @@ try {
     try {
       saveLogin(credentials, info, result, baseUrl);
     } catch (error) {
-      await request(`${baseUrl}/Sessions/Logout`, {
-        method: "POST",
-        headers: authHeader(result.AccessToken),
-      }).catch(() => {});
+      try {
+        await request(`${baseUrl}/Sessions/Logout`, {
+          method: "POST",
+          headers: authHeader(result?.AccessToken),
+        });
+      } catch {
+        // Cleanup must not hide the response-validation or storage error.
+      }
       throw error;
     }
+    show("success");
     title.textContent = "You’re signed in";
-    status.textContent = "Signed in. Opening Jellyfin…";
+    status.textContent = "Opening Jellyfin…";
     continueLink.href = `${baseUrl}/web/#/home`;
     continueLink.hidden = false;
     location.replace(continueLink.href);
   }
 } catch (error) {
-  title.textContent = "Unable to finish sign-in";
-  status.classList.add("sso-status", "sso-status-error");
+  show("error");
+  title.textContent = "Couldn’t finish signing in";
   status.setAttribute("role", "alert");
+  backLink.hidden = false;
   status.textContent =
     error instanceof Error
       ? error.message

@@ -361,6 +361,53 @@ groups"
                     dot.
                   </p>
                 </div>
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
+                >
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
+                      id="UseZitadelRoles"
+                      name="UseZitadelRoles"
+                      aria-describedby="UseZitadelRoles-help"
+                    /><span class="checkboxLabel"
+                      >Read ZITADEL role objects</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="UseZitadelRoles-help"
+                  >
+                    Only use roles assigned within the organization IDs listed
+                    below. Leave off for ordinary role strings or lists.
+                  </p>
+                </div>
+                <div class="sso-field inputContainer">
+                  <label
+                    class="textareaLabel textareaLabelUnfocused"
+                    for="ZitadelOrganizationIds"
+                    >ZITADEL organization IDs</label
+                  >
+                  <textarea
+                    class="emby-textarea sso-line-list"
+                    rows="3"
+                    id="ZitadelOrganizationIds"
+                    name="ZitadelOrganizationIds"
+                    aria-describedby="ZitadelOrganizationIds-help"
+                  ></textarea>
+                  <p class="fieldDescription" id="ZitadelOrganizationIds-help">
+                    One exact organization ID per line, not its domain or
+                    display name. Required when reading ZITADEL role objects.
+                    Roles in other organizations are ignored.
+                  </p>
+                </div>
                 <div class="sso-field inputContainer">
                   <label
                     class="textareaLabel textareaLabelUnfocused"

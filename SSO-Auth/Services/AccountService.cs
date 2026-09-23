@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security;
 using System.Security.Cryptography;
@@ -130,10 +131,15 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
                 DeviceName = request.DeviceName,
                 RemoteEndPoint = remoteAddress,
             }).ConfigureAwait(false);
-            providers.Edit(c => ProviderStore.Find(c, transaction.Mode, transaction.Provider).UserRoleSnapshots[user.Id.ToString("N")] = new UserRoleSnapshot
+            providers.Edit(c =>
             {
-                Roles = completion.Identity.Roles.Distinct(StringComparer.Ordinal).ToArray(),
-                ObservedAt = DateTimeOffset.UtcNow,
+                var provider = ProviderStore.Find(c, transaction.Mode, transaction.Provider);
+                provider.UserRoleSnapshots[user.Id.ToString("N")] = new UserRoleSnapshot
+                {
+                    Roles = completion.Identity.Roles.Distinct(StringComparer.Ordinal).ToArray(),
+                    ObservedAt = DateTimeOffset.UtcNow,
+                };
+                RecordLink(provider, completion.Identity, signedIn: true);
             });
         }
         finally
@@ -192,6 +198,7 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
                 }
 
                 provider.SubjectLinks[completion.Identity.Key] = target;
+                RecordLink(provider, completion.Identity, signedIn: false);
                 // Preserve existing username mappings for upstream compatibility.
             });
             var user = users.GetUserById(target)!;
@@ -262,13 +269,28 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
             Libraries = new
             {
                 Current = currentFolders,
+                CurrentAll = user?.HasPermission(PermissionKind.EnableAllFolders),
                 Effective = synchronize ? resolved!.Folders : currentFolders,
                 All = synchronize ? (bool?)resolved!.Values[PermissionKind.EnableAllFolders] : user?.HasPermission(PermissionKind.EnableAllFolders),
                 Managed = synchronize,
                 Source = blocked ?? (synchronize ? resolved!.FolderSource : "Keep Jellyfin setting"),
             },
-            Note = "Preview shows stored permission flags for the entered groups. Jellyfin administrator privileges can bypass individual restrictions. Device restrictions, remote access, schedules, channel and device lists, and playback limits remain subject to Jellyfin's own checks. Changes apply at the next successful sign-in, not immediately.",
         };
+    }
+
+    private static void RecordLink(ProviderConfig provider, ExternalIdentity identity, bool signedIn)
+    {
+        var now = DateTime.UtcNow;
+        var detail = provider.SubjectLinkDetails.GetValueOrDefault(identity.Key) ?? new SubjectLinkDetail();
+        detail.Username = identity.DisplayName;
+        detail.Issuer = identity.Issuer;
+        detail.LinkedAt ??= now;
+        if (signedIn)
+        {
+            detail.LastSignInAt = now;
+        }
+
+        provider.SubjectLinkDetails[identity.Key] = detail;
     }
 
     private void ValidateFallback(string? provider, bool required = false)

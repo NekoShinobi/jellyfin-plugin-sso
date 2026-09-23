@@ -407,7 +407,7 @@ try {
     .getByRole("button", { name: "Link account", exact: true })
     .first()
     .click();
-  await page.getByText("Account linked.").waitFor({ timeout: 20000 });
+  await page.getByText("Account connected").waitFor({ timeout: 20000 });
   const links = await api("/sso/OID/links/" + userId);
   assert.equal(links.browser.length, 1);
   assert.equal(
@@ -421,6 +421,14 @@ try {
   const linked = await login();
   assert.equal(linked.User.Id.replaceAll("-", ""), userId.replaceAll("-", ""));
   await page.goto(base + "/SSOViews/linking");
+  // The connection shows the provider's username and when it was last used.
+  const connection = page.locator(".sso-identity").first();
+  await connection.waitFor();
+  assert.equal(
+    await connection.locator(".sso-identity-name").textContent(),
+    identity.preferred_username,
+  );
+  assert.match(await connection.textContent(), /Last sign-in/);
   await page
     .getByRole("button", { name: "Unlink", exact: true })
     .first()
@@ -532,7 +540,7 @@ try {
     }),
   });
   await section.getByRole("button", { name: "Link account" }).click();
-  await samlPage.getByText("Account linked.").waitFor();
+  await samlPage.getByText("Account connected").waitFor();
   assert.equal(
     (await api("/sso/SAML/links/" + userId))["browser-saml"].length,
     1,

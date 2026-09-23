@@ -1,7 +1,6 @@
 *.min.js
 **/bin/
 **/obj/
-audits/
 site/
 dist/
 .venv/

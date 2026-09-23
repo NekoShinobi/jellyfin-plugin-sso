@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Mime;
 using System.Text.Json;
@@ -133,7 +134,7 @@ public class SSOController(ProviderStore providers, LoginTransactions transactio
         SetCookie(code, browser, transaction.Callback.StartsWith("https:", StringComparison.Ordinal), TimeSpan.FromMinutes(2));
         Response.Headers.CacheControl = "no-store";
         Response.Headers["Referrer-Policy"] = "no-referrer";
-        Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'";
         return Content(WebResponse.Completion(Request.PathBase.Value ?? string.Empty, transaction.Mode, transaction.Provider, code, transaction.TargetUser), MediaTypeNames.Text.Html);
     }
 
@@ -165,12 +166,34 @@ public class SSOController(ProviderStore providers, LoginTransactions transactio
 
     [Authorize]
     [HttpGet("{mode}/links/{jellyfinUserId:guid}")]
-    public Task<ActionResult> Links(string mode, Guid jellyfinUserId) => Guard(async () =>
+    public Task<ActionResult> Links(string mode, Guid jellyfinUserId, [FromQuery] bool details = false) => Guard(async () =>
     {
         await RequireOwnAccount(jellyfinUserId).ConfigureAwait(false);
         var config = providers.Snapshot();
         var all = Mode(mode) == "OID" ? config.OidConfigs.Select(p => (p.Key, Config: (ProviderConfig)p.Value)) : config.SamlConfigs.Select(p => (p.Key, Config: (ProviderConfig)p.Value));
-        return Ok(all.ToDictionary(p => p.Key, p => p.Config.SubjectLinks.Concat(p.Config.CanonicalLinks).Where(l => l.Value == jellyfinUserId).Select(l => l.Key).Distinct().ToArray()));
+        if (!details)
+        {
+            return Ok(all.ToDictionary(p => p.Key, p => p.Config.SubjectLinks.Concat(p.Config.CanonicalLinks).Where(l => l.Value == jellyfinUserId).Select(l => l.Key).Distinct().ToArray()));
+        }
+
+        // Only this account's own identities and last observed groups are returned.
+        return Ok(all.ToDictionary(p => p.Key, p =>
+        {
+            var snapshot = p.Config.UserRoleSnapshots.GetValueOrDefault(jellyfinUserId.ToString("N"));
+            var verified = p.Config.SubjectLinks.Where(l => l.Value == jellyfinUserId).Select(l =>
+            {
+                var detail = p.Config.SubjectLinkDetails.GetValueOrDefault(l.Key);
+                return new { l.Key, Verified = true, detail?.Username, detail?.Issuer, detail?.LinkedAt, detail?.LastSignInAt };
+            });
+            var legacy = p.Config.CanonicalLinks.Where(l => l.Value == jellyfinUserId)
+                .Select(l => new { l.Key, Verified = false, Username = (string?)l.Key, Issuer = (string?)null, LinkedAt = (DateTime?)null, LastSignInAt = (DateTime?)null });
+            return new
+            {
+                Identities = verified.Concat(legacy).ToArray(),
+                Groups = snapshot?.Roles ?? [],
+                GroupsObservedAt = snapshot is null || snapshot.ObservedAt == default ? (DateTimeOffset?)null : snapshot.ObservedAt,
+            };
+        }));
     });
 
     [Authorize]
@@ -188,6 +211,8 @@ public class SSOController(ProviderStore providers, LoginTransactions transactio
                     links.Remove(canonicalName);
                 }
             }
+
+            config.SubjectLinkDetails.Remove(canonicalName);
         });
         return NoContent();
     });
@@ -221,7 +246,7 @@ public class SSOController(ProviderStore providers, LoginTransactions transactio
     [HttpPost("OID/Add/{provider}")]
     public Task<ActionResult> AddOid(string provider, [FromBody] OidConfig config) => Guard(() =>
     {
-        providers.Edit(c => c.OidConfigs[provider] = config);
+        providers.EditSettings(c => c.OidConfigs[provider] = ConfigurationMigration.Clone(config));
         return NoContent();
     });
 
@@ -229,7 +254,7 @@ public class SSOController(ProviderStore providers, LoginTransactions transactio
     [HttpPost("SAML/Add/{provider}")]
     public Task<ActionResult> AddSaml(string provider, [FromBody] SamlConfig config) => Guard(() =>
     {
-        providers.Edit(c => c.SamlConfigs[provider] = config);
+        providers.EditSettings(c => c.SamlConfigs[provider] = ConfigurationMigration.Clone(config));
         return NoContent();
     });
 

@@ -19,6 +19,7 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<MediaBrowser.Controller.Authentication.IAuthenticationProvider, SsoAuthenticationProvider>();
         serviceCollection.AddSingleton<AccountService>();
         serviceCollection.AddHostedService<LegacyProviderMigration>();
+        serviceCollection.AddHostedService<WebMenuIntegration>();
         serviceCollection.AddSingleton<IAvatarService, AvatarService>();
         serviceCollection.AddHttpClient("sso-avatar").RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(AvatarService.CreateHandler);
         serviceCollection.AddHttpClient("sso-protocol", client => client.Timeout = TimeSpan.FromSeconds(30));

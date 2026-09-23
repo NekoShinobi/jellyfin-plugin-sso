@@ -75,6 +75,33 @@ public class SecurityTests
         Assert.Throws<SsoException>(() => IdentityPolicy.ReadRoles([new Claim("realm", "{")], "realm.roles"));
     }
 
+    [Theory]
+    [InlineData("admin")]
+    [InlineData("[\"admin\"]")]
+    [InlineData("{\"admin\":true}")]
+    [InlineData("{\"admin\":{\"org-a\":true}}")]
+    [InlineData("{\"admin\":{\"org-a\":{}}}")]
+    public void ZitadelMappingRejectsOtherClaimShapes(string value)
+    {
+        var config = new OidConfig { UseZitadelRoles = true, ZitadelOrganizationIds = ["org-a"], RoleClaim = "roles" };
+        Assert.Throws<SsoException>(() => IdentityPolicy.ReadOidcRoles([new Claim("roles", value)], config));
+    }
+
+    [Fact]
+    public void ZitadelMappingRequiresExplicitScopeAndMatchesExactOrganizationIds()
+    {
+        var config = new OidConfig { UseZitadelRoles = true, RoleClaim = "realm.roles" };
+        Assert.Throws<SsoException>(() => IdentityPolicy.ReadOidcRoles([], config));
+        config.ZitadelOrganizationIds = [" "];
+        Assert.Throws<SsoException>(() => IdentityPolicy.ReadOidcRoles([], config));
+        config.ZitadelOrganizationIds = ["org-a"];
+        var claim = new Claim("realm", "{\"roles\":{\"admin\":{\"ORG-A\":\"org-a\"},\"allowed\":{\"org-a\":\"domain.test\"}}}");
+        Assert.Equal(new[] { "allowed" }, IdentityPolicy.ReadOidcRoles([claim, claim], config));
+        Assert.Empty(IdentityPolicy.ReadOidcRoles([], config));
+        config.RoleClaim = "";
+        Assert.Throws<SsoException>(() => IdentityPolicy.ReadOidcRoles([claim], config));
+    }
+
     [Fact]
     public void IdentityUsesIssuerAndSubjectInsteadOfDisplayName()
     {

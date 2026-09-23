@@ -166,6 +166,24 @@ public class SamlTests : IDisposable
         Assert.ThrowsAny<Exception>(() => new SamlAdapter(_transactions, TimeProvider.System).Verify(transaction, response));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \r\n ")]
+    [InlineData("not-base64")]
+    [InlineData("bm90LWEtY2VydGlmaWNhdGU=")]
+    public void InvalidCertificatesHaveActionableDiagnostics(string? certificate)
+    {
+        var transaction = Transaction();
+        var config = (SamlConfig)transaction.Settings;
+        config.SamlCertificate = certificate!;
+        var adapter = new SamlAdapter(_transactions, TimeProvider.System);
+        var startError = Assert.Throws<SsoException>(() => adapter.Start(config, Callback, "relay"));
+        Assert.Equal("The configured SAML signing certificate is invalid.", startError.Message);
+        var verifyError = Assert.Throws<SsoException>(() => adapter.Verify(transaction, Response()));
+        Assert.Equal(startError.Message, verifyError.Message);
+    }
+
     public void Dispose()
     {
         _transactions.Dispose();

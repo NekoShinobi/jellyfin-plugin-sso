@@ -145,6 +145,9 @@ export default function (view) {
     const port = $("#PortOverride").value;
     if (scheme === "https" || scheme === "http") url.protocol = scheme + ":";
     if (port && Number(port) >= 1 && Number(port) <= 65535) url.port = port;
+    const savedPort = configuration?.OidConfigs?.[selected]?.PortOverride;
+    if (port && [0, -1].includes(savedPort) && Number(port) === savedPort)
+      url.port = savedPort === -1 ? "" : "0";
     if ($("#sso-callback-url").textContent !== url.href) {
       resetCopyFeedback();
       $("#sso-copy-status").textContent = "";
@@ -321,6 +324,49 @@ export default function (view) {
         ? ""
         : "Enter https or http, or leave this blank.",
     );
+    const enabled = $("#Enabled").checked;
+    const endpoint = $("#OidEndpoint");
+    const clientId = $("#OidClientId");
+    endpoint.required = enabled;
+    clientId.required = enabled;
+    let validEndpoint = true;
+    if (enabled) {
+      try {
+        const protocol = new URL(endpoint.value.trim()).protocol;
+        validEndpoint =
+          protocol === "https:" ||
+          (protocol === "http:" && $("#DisableHttps").checked);
+      } catch {
+        validEndpoint = false;
+      }
+    }
+    endpoint.setCustomValidity(
+      validEndpoint
+        ? ""
+        : "Enter an HTTPS issuer URL. HTTP requires Disable HTTPS.",
+    );
+    clientId.setCustomValidity(
+      enabled && !clientId.value.trim() ? "Enter a client ID." : "",
+    );
+    const zitadel = enabled && $("#UseZitadelRoles").checked;
+    const roleClaim = $("#RoleClaim");
+    const organizations = $("#ZitadelOrganizationIds");
+    roleClaim.setCustomValidity(
+      zitadel && !roleClaim.value.trim()
+        ? "Enter the ZITADEL role claim path."
+        : "",
+    );
+    organizations.setCustomValidity(
+      zitadel && !organizations.value.trim()
+        ? "Enter at least one ZITADEL organization ID."
+        : "",
+    );
+    const port = $("#PortOverride");
+    const savedPort = configuration?.OidConfigs?.[selected]?.PortOverride;
+    port.min =
+      [0, -1].includes(savedPort) && Number(port.value) === savedPort
+        ? String(savedPort)
+        : "1";
     const invalid = [...form.querySelectorAll("input, textarea")].find(
       (input) => !input.validity.valid,
     );

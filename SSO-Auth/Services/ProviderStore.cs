@@ -26,6 +26,7 @@ public static class ConfigurationMigration
             configuration.OidConfigs[key] ??= new();
             NormalizeProvider(configuration.OidConfigs[key]);
             configuration.OidConfigs[key].OidScopes ??= [];
+            configuration.OidConfigs[key].ZitadelOrganizationIds ??= [];
         }
 
         foreach (var key in configuration.SamlConfigs.Keys.ToArray())
@@ -40,6 +41,7 @@ public static class ConfigurationMigration
 
     public static void NormalizeProvider(ProviderConfig config)
     {
+        config.DefaultProvider = config.DefaultProvider?.Trim() ?? string.Empty;
         config.Roles ??= [];
         config.AdminRoles ??= [];
         config.EnabledFolders ??= [];
@@ -48,6 +50,12 @@ public static class ConfigurationMigration
         config.FolderRoleMapping ??= [];
         config.CanonicalLinks ??= new();
         config.SubjectLinks ??= new();
+        config.SubjectLinkDetails ??= new();
+        foreach (var key in config.SubjectLinkDetails.Keys.Where(k => !config.SubjectLinks.ContainsKey(k)).ToArray())
+        {
+            config.SubjectLinkDetails.Remove(key);
+        }
+
         foreach (var mapping in config.FolderRoleMapping)
         {
             if (mapping is null)
@@ -68,6 +76,7 @@ public static class ConfigurationMigration
         var json = JsonSerializer.SerializeToNode(config, config.GetType())!.AsObject();
         json.Remove(nameof(ProviderConfig.CanonicalLinks));
         json.Remove(nameof(ProviderConfig.SubjectLinks));
+        json.Remove(nameof(ProviderConfig.SubjectLinkDetails));
         json.Remove(nameof(ProviderConfig.UserRoleSnapshots));
         return LoginTransactions.Hash(json.ToJsonString());
     }
@@ -106,6 +115,14 @@ public sealed class ProviderStore(Func<PluginConfiguration> read, Action<PluginC
             write(ConfigurationMigration.Normalize(config));
         }
     }
+
+    internal void EditSettings(Action<PluginConfiguration> update) => Edit(config =>
+    {
+        var previous = ConfigurationMigration.Clone(config);
+        update(config);
+        ConfigurationMigration.Normalize(config);
+        ProviderValidation.ValidateChanges(config, previous);
+    });
 
     public static ProviderConfig Find(PluginConfiguration config, string mode, string name) => mode == "OID" ? config.OidConfigs[name] : config.SamlConfigs[name];
 

@@ -23,7 +23,15 @@ public sealed record ExternalIdentity(string Issuer, string Subject, string Disp
 
 public static class IdentityPolicy
 {
-    public static string[] ReadRoles(IEnumerable<Claim> claims, string path)
+    public static string[] ReadRoles(IEnumerable<Claim> claims, string path) => ReadRoles(claims, path, null);
+
+    internal static string[] ReadOidcRoles(IEnumerable<Claim> claims, OidConfig config)
+    {
+        ProviderValidation.RoleMapping(config);
+        return ReadRoles(claims, config.RoleClaim, config.UseZitadelRoles ? config.ZitadelOrganizationIds : null);
+    }
+
+    private static string[] ReadRoles(IEnumerable<Claim> claims, string path, IReadOnlyCollection<string>? organizations)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -35,7 +43,7 @@ public static class IdentityPolicy
         foreach (var claim in claims.Where(c => c.Type == segments[0]))
         {
             var value = claim.Value.Trim();
-            if (segments.Length == 1 && !value.StartsWith('[') && !value.StartsWith('{'))
+            if (organizations is null && segments.Length == 1 && !value.StartsWith('[') && !value.StartsWith('{'))
             {
                 values.Add(value);
                 continue;
@@ -53,7 +61,28 @@ public static class IdentityPolicy
                     }
                 }
 
-                if (node.ValueKind == JsonValueKind.String)
+                if (organizations is not null)
+                {
+                    if (node.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new SsoException("ZITADEL role claims must map role names to organization objects.");
+                    }
+
+                    foreach (var role in node.EnumerateObject())
+                    {
+                        if (role.Value.ValueKind != JsonValueKind.Object
+                            || role.Value.EnumerateObject().Any(org => org.Value.ValueKind != JsonValueKind.String))
+                        {
+                            throw new SsoException("ZITADEL role claims must map role names to organization objects.");
+                        }
+
+                        if (role.Value.EnumerateObject().Any(org => organizations.Contains(org.Name, StringComparer.Ordinal)))
+                        {
+                            values.Add(role.Name);
+                        }
+                    }
+                }
+                else if (node.ValueKind == JsonValueKind.String)
                 {
                     values.Add(node.GetString()!);
                 }

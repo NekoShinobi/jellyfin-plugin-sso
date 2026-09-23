@@ -65,7 +65,7 @@ without deployment credentials.
 
 GitHub supplies the Pages base URL, including the repository subpath or custom
 domain. The workflow publishes only the generated `site/` directory. It never
-copies `audits/`, source configuration, or build output into the site. The plugin
+copies source configuration or build output into the site. The plugin
 catalog remains on `main`; it does not depend on a Pages deployment.
 
 See [GitHub's custom Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)

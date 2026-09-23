@@ -4,28 +4,48 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Sign-in · Jellyfin</title>
+    <title>Signing in · Jellyfin</title>
+    <link rel="icon" href="{{basePath}}/web/favicons/touchicon.png" />
     <link rel="stylesheet" href="{{basePath}}/web/themes/dark/theme.css" />
     <link rel="stylesheet" href="{{basePath}}/SSOViews/style.css" />
   </head>
-  <body class="sso-standalone">
-    <main class="sso-shell">
-      <nav class="sso-topbar" aria-label="Jellyfin">
-        <div class="sso-brand">Jellyfin</div>
-        <a href="{{basePath}}/web/">Back to Jellyfin</a>
-      </nav>
-      <section class="sso-completion">
-        <h1 id="completion-title">Finishing sign-in</h1>
-        <p id="status" role="status" aria-live="polite">Completing sign-in…</p>
-        <div class="sso-actions">
-          <a
-            id="continue"
-            class="sso-button sso-button-primary emby-button raised button-submit"
-            hidden
-            >Continue to Jellyfin</a
-          >
-        </div>
-      </section>
+  <body class="sso-standalone sso-completion-page" data-state="working">
+    <main class="sso-completion">
+      <img
+        class="sso-completion-logo"
+        src="{{basePath}}/web/favicons/touchicon512.png"
+        alt="Jellyfin"
+        width="64"
+        height="64"
+      />
+      <div class="sso-completion-icon" aria-hidden="true">
+        <span class="sso-spinner"></span>
+        <svg class="sso-icon-success" viewBox="0 0 24 24">
+          <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+        </svg>
+        <svg class="sso-icon-error" viewBox="0 0 24 24">
+          <path d="M10.75 4h2.5v10.5h-2.5zm0 13h2.5v2.5h-2.5z" />
+        </svg>
+      </div>
+      <h1 id="completion-title">Signing you in</h1>
+      <p id="status" role="status" aria-live="polite">
+        Finishing sign-in with your identity provider…
+      </p>
+      <div class="sso-completion-actions">
+        <a
+          id="continue"
+          class="sso-button sso-button-primary emby-button raised button-submit"
+          hidden
+          >Continue to Jellyfin</a
+        >
+        <a
+          id="back"
+          class="sso-button emby-button button-flat"
+          href="{{basePath}}/web/"
+          hidden
+          >Back to Jellyfin</a
+        >
+      </div>
     </main>
     <script id="sso-data" type="application/json">
       {{data}}

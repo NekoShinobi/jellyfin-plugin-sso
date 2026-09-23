@@ -19,4 +19,3 @@ __pycache__/
 # Local environment
 .env
 .DS_Store
-audits/

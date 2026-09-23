@@ -35,8 +35,8 @@ public class PluginConfigurationTests
             var store = new ProviderStore(() => plugin.Configuration, plugin.PersistConfiguration, plugin.ConfigurationGate);
             store.Edit(config =>
             {
-                config.OidConfigs["same-name"] = new() { Enabled = true };
-                config.SamlConfigs["same-name"] = new() { Enabled = true };
+                config.OidConfigs["same-name"] = ProviderFixtures.Oid();
+                config.SamlConfigs["same-name"] = ProviderFixtures.Saml();
                 config.OidConfigs["deleted"] = new();
                 config.SamlConfigs["deleted"] = new();
                 foreach (var protocol in new[] { "OID", "SAML" })

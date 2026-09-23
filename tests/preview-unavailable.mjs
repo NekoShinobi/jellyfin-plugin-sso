@@ -30,7 +30,6 @@ export async function unavailableUserPreviewChecks(page, moduleUrl) {
           Synchronize: false,
           Permissions: [],
           Libraries: { All: false, Effective: [], Source: "Test" },
-          Note: "Test",
         };
       },
     });
@@ -43,9 +42,6 @@ export async function unavailableUserPreviewChecks(page, moduleUrl) {
       })),
     };
     editor.load(provider);
-    const scope = root.querySelector("#sso-permission-scope");
-    scope.value = "users";
-    scope.dispatchEvent(new Event("change"));
     const edit = (name) =>
       [...root.querySelectorAll("button")]
         .find((b) => b.getAttribute("aria-label") === "Edit " + name)

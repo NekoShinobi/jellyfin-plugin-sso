@@ -113,5 +113,10 @@ linking proof. Login and linking codes cannot be interchanged.
 | GET    | `oid/links/{jellyfinUserId}`                              |
 | GET    | `saml/links/{jellyfinUserId}`                             |
 
+Add `?details=true` to the `links` routes to receive, per provider, the connected
+`Identities` (key, whether verified, provider username, issuer, linked and
+last sign-in times) and the `Groups` seen at the user's last sign-in. Both forms
+return only the calling user's own links.
+
 `mode` is `OID` or `SAML`. URL-encode each path segment. See
 [account linking](../accounts-and-clients.md) for the supported flow.

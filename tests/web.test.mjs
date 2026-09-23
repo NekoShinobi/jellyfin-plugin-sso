@@ -238,3 +238,142 @@ test("device IDs are persistent UUIDs with and without native randomUUID", () =>
     Object.defineProperty(globalThis, "crypto", descriptor);
   }
 });
+
+test("malformed login responses cannot mutate or persist credentials", () => {
+  const valid = {
+    ServerId: "current",
+    AccessToken: "synthetic",
+    User: { Id: "user" },
+  };
+  for (const result of [
+    null,
+    undefined,
+    [],
+    "invalid",
+    42,
+    {},
+    { ...valid, ServerId: "other" },
+    ...[undefined, null, "", "bad\\token", 'bad"token', 42, true, {}].map(
+      (AccessToken) => ({ ...valid, AccessToken }),
+    ),
+    ...[undefined, null, {}, { Id: "" }, { Id: 42 }].map((User) => ({
+      ...valid,
+      User,
+    })),
+  ]) {
+    const credentials = {
+      Servers: [{ Id: "other", AccessToken: "preserved" }],
+    };
+    const before = structuredClone(credentials);
+    assert.throws(
+      () =>
+        saveLogin(credentials, { Id: "current" }, result, "https://example", {
+          setItem: () => assert.fail("must not save"),
+        }),
+      /unexpected login response/,
+    );
+    assert.deepEqual(credentials, before);
+  }
+});
+
+test("completion preserves validation and storage errors across all cleanup failures", async () => {
+  const completion = await readFile(
+    new URL("../SSO-Auth/Views/complete.js", import.meta.url),
+    "utf8",
+  );
+  const helpers = {
+    readCredentials,
+    serverEntry,
+    saveLogin,
+    request,
+    authHeader,
+    device,
+    sameUser,
+  };
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const run = new AsyncFunction(
+    ...Object.keys(helpers),
+    "document",
+    "location",
+    "localStorage",
+    completion.replace(/^import[\s\S]*?from "\.\/web\.js";/, ""),
+  );
+  const valid = {
+    ServerId: "current",
+    AccessToken: "synthetic",
+    User: { Id: "user" },
+  };
+  for (const result of [
+    null,
+    {},
+    { ...valid, AccessToken: "bad token" },
+    { ...valid, AccessToken: 42 },
+    { ...valid, ServerId: "other" },
+    valid,
+  ]) {
+    for (const cleanup of ["success", "sync", "async"]) {
+      let writes = 0;
+      let logouts = 0;
+      const storage = {
+        getItem: () => null,
+        setItem: () => {
+          if (++writes === 2) throw new Error("Storage quota exceeded");
+        },
+      };
+      const elements = Object.fromEntries(
+        ["#status", "#completion-title", "#continue", "#back", "#sso-data"].map(
+          (id) => [
+            id,
+            { hidden: true, classList: { add() {} }, setAttribute() {} },
+          ],
+        ),
+      );
+      elements["#sso-data"].textContent = JSON.stringify({
+        basePath: "/jf",
+        provider: "test",
+        mode: "OID",
+        code: "once",
+      });
+      const mockRequest = (url) => {
+        if (url.endsWith("/Public")) return Promise.resolve({ Id: "current" });
+        if (url.endsWith("/Auth/test")) return Promise.resolve(result);
+        assert.equal(url, "https://example/jf/Sessions/Logout");
+        logouts++;
+        if (cleanup === "sync") throw new Error("Synchronous cleanup failure");
+        if (cleanup === "async")
+          return Promise.reject(new Error("Network cleanup failure"));
+        return Promise.resolve(null);
+      };
+      const injected = {
+        ...helpers,
+        readCredentials: () => readCredentials(storage),
+        saveLogin: (...args) => saveLogin(...args, storage),
+        request: mockRequest,
+        device: () => ({ DeviceID: "persistent" }),
+      };
+      const document = {
+        querySelector: (id) => elements[id],
+        body: { dataset: {} },
+      };
+      await run(
+        ...Object.values(injected),
+        document,
+        {
+          origin: "https://example",
+          replace: () => assert.fail("must not redirect"),
+        },
+        storage,
+      );
+      assert.equal(document.body.dataset.state, "error");
+      assert.equal(elements["#back"].hidden, false);
+      assert.equal(
+        elements["#status"].textContent,
+        result === valid
+          ? "Storage quota exceeded"
+          : "Jellyfin returned an unexpected login response.",
+      );
+      assert.equal(elements["#continue"].hidden, true);
+      assert.equal(logouts, result?.AccessToken === "synthetic" ? 1 : 0);
+    }
+  }
+});

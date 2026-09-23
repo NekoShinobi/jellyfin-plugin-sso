@@ -22,6 +22,7 @@
     <EmbeddedResource Include="Config\linking.js" />
     <EmbeddedResource Include="Views\web.js" />
     <EmbeddedResource Include="Views\complete.js" />
+    <EmbeddedResource Include="Views\menu.js" />
     <None Remove="Views\complete.html" />
     <EmbeddedResource Include="Views\complete.html" />
   </ItemGroup>

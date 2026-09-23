@@ -278,6 +278,9 @@
   padding: 0.5em 0 1.5em;
 }
 .sso-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
   font-size: 1.25em;
   font-weight: 500;
 }
@@ -348,8 +351,42 @@
   padding-top: 0.75em;
   margin-top: 1em;
 }
-.sso-identity-row span {
+.sso-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+  min-width: 0;
+}
+.sso-identity > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+.sso-identity-icon {
+  flex: 0 0 auto;
+  width: 1.4em;
+  height: 1.4em;
+  fill: var(--sso-accent);
+  margin-top: 0.05em;
+}
+.sso-identity-name {
+  font-weight: 500;
   overflow-wrap: anywhere;
+}
+.sso-identity-fact {
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+.sso-identity-groups {
+  margin-top: 1em;
+}
+.sso-identity-groups:empty {
+  display: none;
+}
+.sso-identity-groups p {
+  margin: 0 0 0.5em;
+  font-size: 0.88em;
 }
 .sso-standalone .sso-button {
   display: inline-flex;
@@ -380,11 +417,99 @@
 .sso-page-footer p {
   margin-bottom: 0.5em;
 }
-.sso-completion {
-  margin: 2em 0;
+/* Sign-in completion: centered like Jellyfin's own login screen. */
+.sso-completion-page {
+  display: grid;
+  justify-items: center;
+  align-items: start;
+  padding: max(1.5em, 18vh) 1.5em 1.5em;
 }
-.sso-completion .sso-actions {
-  margin-top: 1.5em;
+.sso-completion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 24em;
+  text-align: center;
+}
+.sso-completion-logo {
+  width: 4em;
+  height: 4em;
+  margin-bottom: 2.5em;
+}
+.sso-completion-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5em;
+  height: 3.5em;
+  margin-bottom: 1.25em;
+}
+.sso-completion-icon > * {
+  grid-area: 1 / 1;
+}
+.sso-spinner {
+  width: 2.75em;
+  height: 2.75em;
+  border: 3px solid var(--sso-line);
+  border-top-color: var(--sso-accent);
+  border-radius: 50%;
+  animation: sso-spin 0.9s linear infinite;
+}
+.sso-completion-icon svg {
+  display: none;
+  width: 3.5em;
+  height: 3.5em;
+  padding: 0.6em;
+  border-radius: 50%;
+  fill: currentColor;
+}
+.sso-icon-success {
+  color: var(--sso-accent);
+  background: rgba(0, 164, 220, 0.15);
+}
+.sso-icon-error {
+  color: var(--jf-palette-error-main, #ef5350);
+  background: rgba(239, 83, 80, 0.15);
+}
+[data-state="success"] .sso-spinner,
+[data-state="error"] .sso-spinner {
+  display: none;
+}
+[data-state="success"] .sso-icon-success,
+[data-state="error"] .sso-icon-error {
+  display: block;
+}
+.sso-completion h1 {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 500;
+}
+.sso-completion #status {
+  margin: 0.6em 0 0;
+  color: var(--sso-muted);
+  overflow-wrap: anywhere;
+}
+.sso-completion-actions {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 0.25em;
+  margin-top: 2em;
+}
+.sso-completion-actions .sso-button {
+  margin: 0;
+}
+.sso-standalone .sso-button-primary {
+  background: var(--sso-accent);
+  color: #fff;
+}
+.sso-standalone .sso-button-primary:hover {
+  filter: brightness(1.1);
+}
+@keyframes sso-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (max-width: 640px) {
   .sso-field-grid {
@@ -409,6 +534,9 @@
 @media (prefers-reduced-motion: reduce) {
   .sso-standalone .sso-button {
     transition: none;
+  }
+  .sso-spinner {
+    animation-duration: 3s;
   }
 }
 
@@ -441,9 +569,264 @@
 .sso-rule-add .sso-field {
   flex: 1 1 16em;
 }
-.sso-rule-editor,
-.sso-permission-preview {
+/* Rule list: Everyone, then groups, then user overrides. */
+.sso-rule-items {
+  border-radius: 0.3em;
+  overflow: hidden;
+}
+.sso-rule-row {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  background: var(--sso-paper);
+  border-bottom: 1px solid var(--sso-line);
+  border-inline-start: 3px solid transparent;
+}
+.sso-rule-row:last-child {
+  border-bottom: 0;
+}
+.sso-rule-row.is-selected {
+  background: var(--jf-palette-action-selected, rgba(255, 255, 255, 0.08));
+  border-inline-start-color: var(--sso-accent);
+}
+.sso-rule-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 1em;
+  min-width: 0;
+  margin: 0;
+  padding: 0.75em 1em;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sso-rule-open:hover {
+  background: var(--jf-palette-action-hover, rgba(255, 255, 255, 0.04));
+}
+.sso-rule-open:focus-visible {
+  outline: 2px solid var(--sso-accent);
+  outline-offset: -2px;
+}
+.sso-rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  min-width: 0;
+}
+.sso-rule-name,
+.sso-rule-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sso-rule-detail {
+  font-size: 0.88em;
+}
+.sso-rule-name {
+  font-weight: 500;
+}
+.sso-rule-icon {
+  color: var(--sso-muted);
+}
+.sso-rule-row.is-selected .sso-rule-icon {
+  color: var(--sso-accent);
+}
+.sso-rule-section {
+  margin-top: 1.75em;
+}
+.sso-rule-section-title {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 500;
+}
+.sso-rule-section-description {
+  margin: 0.25em 0 0.75em;
+  font-size: 0.9em;
+}
+.sso-rule-section .sso-empty {
+  margin: 0;
+  padding: 0.9em 1em;
+  background: var(--sso-paper);
+}
+.sso-rule-section .sso-rule-add {
+  margin-top: 0.5em;
+}
+.sso-rule-divider {
+  border: 0;
+  border-top: 1px solid var(--sso-line);
+  margin: 2em 0 0;
+}
+.sso-rule-editor {
   margin-top: 2em;
+  padding: 1.25em 1.5em 1.5em;
+  background: var(--sso-paper);
+  border-radius: 0.3em;
+}
+.sso-rule-editor-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+  margin-bottom: 1.25em;
+}
+.sso-rule-editor-heading .sso-rule-icon {
+  color: var(--sso-accent);
+  margin-top: 0.1em;
+}
+.sso-rule-editor-title {
+  margin: 0;
+  font-size: 1.15em;
+  font-weight: 500;
+}
+.sso-rule-editor-heading p {
+  margin: 0.25em 0 0;
+}
+
+/* Preview */
+.sso-permission-preview {
+  margin-top: 2.5em;
+}
+.sso-permission-preview > h3 {
+  margin-bottom: 0.25em;
+}
+.sso-preview-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 1.5em;
+  align-items: start;
+}
+.sso-preview-inputs .fieldDescription,
+.sso-preview-inputs .sso-preview-button {
+  grid-column: 1 / -1;
+}
+.sso-preview-inputs .sso-preview-button {
+  justify-self: start;
+  margin: 1em 0 0;
+}
+.sso-preview-inputs .emby-textarea {
+  min-height: 3.2em;
+}
+.sso-preview-result {
+  margin-top: 1.5em;
+  padding: 1.25em 1.5em;
+  background: var(--sso-paper);
+  border-radius: 0.3em;
+  border-inline-start: 3px solid var(--sso-accent);
+}
+.sso-preview-result.is-blocked {
+  border-inline-start-color: var(--jf-palette-error-main, #c62828);
+}
+.sso-preview-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+}
+.sso-preview-headline .material-icons {
+  color: var(--sso-accent);
+}
+.sso-preview-result.is-blocked .sso-preview-headline .material-icons {
+  color: var(--jf-palette-error-main, #ef5350);
+}
+.sso-preview-headline h4 {
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 500;
+}
+.sso-preview-headline p {
+  margin: 0.25em 0 0;
+}
+.sso-preview-label {
+  margin: 1.5em 0 0.6em;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sso-muted);
+}
+.sso-change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sso-change-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 12em);
+  align-items: center;
+  gap: 1em;
+  padding: 0.55em 0;
+  border-bottom: 1px solid var(--sso-line);
+}
+.sso-change-list li:last-child {
+  border-bottom: 0;
+}
+.sso-change-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.sso-change-arrow {
+  font-size: 1.1em;
+  color: var(--sso-muted);
+}
+.sso-change-source {
+  font-size: 0.88em;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+.sso-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+.sso-chip {
+  display: inline-block;
+  padding: 0.2em 0.75em;
+  border-radius: 1em;
+  font-size: 0.9em;
+  background: var(--jf-palette-action-selected, rgba(255, 255, 255, 0.1));
+  white-space: nowrap;
+}
+.sso-chip.is-on {
+  background: rgba(0, 164, 220, 0.2);
+  color: var(--jf-palette-primary-light, #7fd4f2);
+}
+.sso-chip.is-off {
+  color: var(--sso-muted);
+}
+.sso-chip.is-added::before {
+  content: "+ ";
+}
+.sso-chip.is-added {
+  background: rgba(0, 164, 220, 0.2);
+  color: var(--jf-palette-primary-light, #7fd4f2);
+}
+.sso-chip.is-removed {
+  color: var(--sso-muted);
+  text-decoration: line-through;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--sso-line);
+}
+.sso-preview-source {
+  margin: 0.6em 0 0;
+  font-size: 0.88em;
+}
+.sso-preview-all {
+  margin-top: 1.5em;
+}
+.sso-preview-all summary {
+  cursor: pointer;
+  color: var(--sso-accent);
+  padding: 0.25em 0;
+}
+.sso-permission-table tr.is-unmanaged td {
+  color: var(--sso-muted);
+}
+.sso-permission-table tr.is-changed th,
+.sso-permission-table tr.is-changed td {
+  font-weight: 600;
 }
 .sso-table-scroll {
   overflow-x: auto;
@@ -455,10 +838,6 @@
   text-align: left;
   font-size: 0.94em;
 }
-.sso-permission-table caption {
-  text-align: left;
-  padding: 1em 0;
-}
 .sso-permission-table th,
 .sso-permission-table td {
   padding: 0.7em;
@@ -469,7 +848,8 @@
   font-weight: 500;
 }
 .sso-permission-table td:nth-child(2),
-.sso-permission-table td:nth-child(3) {
+.sso-permission-table td:nth-child(3),
+.sso-permission-table td:nth-child(4) {
   white-space: nowrap;
 }
 
@@ -498,4 +878,23 @@
   left: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+/* Narrow layouts for the rule editor and preview; after their base rules. */
+@media (max-width: 640px) {
+  .sso-preview-inputs {
+    grid-template-columns: 1fr;
+  }
+  .sso-change-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .sso-change-source {
+    grid-column: 1 / -1;
+    text-align: start;
+    margin-top: -0.6em;
+  }
+  .sso-rule-editor,
+  .sso-preview-result {
+    padding: 1em;
+  }
 }

@@ -26,9 +26,24 @@ username mappings remain usable even if the provider assigns that name a new sub
 
 For different local and external usernames, sign in to the existing Jellyfin account using its local password or configured
 fallback, then open **Account connections** at `/SSOViews/linking` under the same
-Jellyfin base URL. The page shows the current Jellyfin account and whether each
-provider is connected. Choose **Link account**, authenticate with the provider,
-and wait for confirmation.
+Jellyfin base URL. Choose **Link account**, authenticate with the provider, and
+wait for confirmation.
+
+For each provider, the page shows every identity connected to your account: the
+provider username, the identity provider's address, when it was linked, and when
+it was last used to sign in, plus the groups the provider sent at your last
+sign-in. Older username-based links are labelled as such; signing in with the
+provider adds a verified link. Details for links made before this version appear
+after the next sign-in.
+
+!!! tip "Open it from your settings"
+
+    With the [File Transformation](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation)
+    plugin installed, **Account connections** also appears in each user's
+    **Settings** menu in the Jellyfin web client, next to **Profile**. Without it,
+    share the `/SSOViews/linking` link with your users. The entry is shown only
+    while a provider is enabled.
+
 Local and external usernames may differ. The flow preserves the local session
 and does not change permissions or provision a new account.
 

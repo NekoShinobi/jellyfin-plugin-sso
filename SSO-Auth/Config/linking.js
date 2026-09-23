@@ -25,6 +25,40 @@ function node(tag, className, text) {
   if (text !== undefined) element.textContent = text;
   return element;
 }
+const formatDate = (value) =>
+  value
+    ? new Date(value).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : null;
+function host(issuer) {
+  try {
+    return new URL(issuer).host;
+  } catch {
+    return issuer;
+  }
+}
+// Material icon paths, inline because standalone pages cannot load the web client's icon font.
+const icons = {
+  verified:
+    "M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z",
+  person:
+    "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z",
+};
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "sso-identity-icon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", icons[name]);
+  svg.append(path);
+  return svg;
+}
+function chip(text) {
+  return node("span", "sso-chip", text);
+}
 function message(text, error = false) {
   status.hidden = !text;
   status.textContent = text;
@@ -50,9 +84,10 @@ try {
     ["OID", "SAML"].map(async (mode) => {
       const [names, links] = await Promise.all([
         request(`${baseUrl}/sso/${mode}/GetNames`),
-        request(`${baseUrl}/sso/${mode}/links/${encodeURIComponent(userId)}`, {
-          headers,
-        }),
+        request(
+          `${baseUrl}/sso/${mode}/links/${encodeURIComponent(userId)}?details=true`,
+          { headers },
+        ),
       ]);
       return { mode, names, links };
     }),
@@ -63,12 +98,13 @@ try {
     const visible = [
       ...new Set([
         ...names,
-        ...Object.keys(links).filter((name) => links[name]?.length),
+        ...Object.keys(links).filter((name) => links[name]?.Identities?.length),
       ]),
     ].sort((a, b) => a.localeCompare(b));
     for (const provider of visible) {
       const enabled = names.includes(provider);
-      let identities = [...(links[provider] || [])];
+      const detail = links[provider] || {};
+      let identities = [...(detail.Identities || [])];
       const section = node("section", "sso-connection");
       section.dataset.provider = provider;
       const heading = node("div", "sso-connection-header");
@@ -129,13 +165,33 @@ try {
       for (const identity of identities) {
         const group = node("div", "");
         const row = node("div", "sso-identity-row");
-        const label = node(
-          "span",
-          "",
-          /^[A-F0-9]{64}$/.test(identity)
-            ? "Verified account"
-            : `Legacy link: ${identity}`,
+        const label = node("div", "sso-identity");
+        const name = identity.Username || "Verified account";
+        label.append(
+          icon(identity.Verified ? "verified" : "person"),
+          node("div", ""),
         );
+        const text = label.lastChild;
+        text.append(node("strong", "sso-identity-name", name));
+        const facts = [
+          identity.Issuer ? `From ${host(identity.Issuer)}` : null,
+          formatDate(identity.LinkedAt)
+            ? `Linked ${formatDate(identity.LinkedAt)}`
+            : null,
+          formatDate(identity.LastSignInAt)
+            ? `Last sign-in ${formatDate(identity.LastSignInAt)}`
+            : null,
+        ].filter(Boolean);
+        if (!identity.Verified)
+          facts.unshift(
+            "Older username link. Signing in with this provider adds a verified link.",
+          );
+        else if (!facts.length)
+          facts.push(
+            "Details appear after your next sign-in with this provider.",
+          );
+        for (const fact of facts)
+          text.append(node("span", "sso-muted sso-identity-fact", fact));
         const remove = node(
           "button",
           "sso-button sso-button-quiet sso-danger-text",
@@ -171,10 +227,11 @@ try {
           confirm.disabled = cancel.disabled = true;
           try {
             await request(
-              `${baseUrl}/sso/${mode}/Link/${encodeURIComponent(provider)}/${encodeURIComponent(userId)}/${encodeURIComponent(identity)}`,
+              `${baseUrl}/sso/${mode}/Link/${encodeURIComponent(provider)}/${encodeURIComponent(userId)}/${encodeURIComponent(identity.Key)}`,
               { method: "DELETE", headers },
             );
             identities = identities.filter((item) => item !== identity);
+            if (!identities.length) groups.remove();
             group.remove();
             updateState();
             message(
@@ -195,8 +252,24 @@ try {
         group.append(row, confirmation);
         connections.append(group);
       }
+      // Groups the provider sent at this user's last sign-in, as permission rules see them.
+      const groups = node("div", "sso-identity-groups");
+      if (identities.length && detail.Groups?.length) {
+        const observed = formatDate(detail.GroupsObservedAt);
+        groups.append(
+          node(
+            "p",
+            "sso-muted",
+            observed
+              ? `Groups at your last sign-in (${observed})`
+              : "Groups at your last sign-in",
+          ),
+          node("div", "sso-chips"),
+        );
+        groups.lastChild.append(...detail.Groups.map(chip));
+      }
       updateState();
-      section.append(heading, description, connections, actions);
+      section.append(heading, description, connections, groups, actions);
       container.append(section);
     }
   }

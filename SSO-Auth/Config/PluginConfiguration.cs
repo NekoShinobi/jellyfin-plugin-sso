@@ -74,6 +74,10 @@ public class ProviderConfig
 
     [XmlElement("SubjectLinks")]
     public SerializableDictionary<string, Guid> SubjectLinks { get; set; } = new();
+
+    // Display details for SubjectLinks, keyed the same way; shown on the account connections page.
+    [XmlElement("SubjectLinkDetails")]
+    public SerializableDictionary<string, SubjectLinkDetail> SubjectLinkDetails { get; set; } = new();
 }
 
 [XmlRoot("PluginConfiguration")]
@@ -100,6 +104,10 @@ public class OidConfig : ProviderConfig
     public string OidSecret { get; set; } = string.Empty;
 
     public string RoleClaim { get; set; } = string.Empty;
+
+    public bool UseZitadelRoles { get; set; }
+
+    public string[] ZitadelOrganizationIds { get; set; } = [];
 
     public string[] OidScopes { get; set; } = [];
 
@@ -145,6 +153,17 @@ public class UserPermissionRule : PermissionRule
     public Guid UserId { get; set; }
 
     public bool PreservePermissions { get; set; }
+}
+
+public class SubjectLinkDetail
+{
+    public string Username { get; set; } = string.Empty;
+
+    public string Issuer { get; set; } = string.Empty;
+
+    public DateTime? LinkedAt { get; set; }
+
+    public DateTime? LastSignInAt { get; set; }
 }
 
 public class UserRoleSnapshot

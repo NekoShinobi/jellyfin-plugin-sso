@@ -75,7 +75,8 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
     {
         lock (_configurationGate)
         {
-            var normalized = ConfigurationMigration.Normalize((PluginConfiguration)configuration);
+            var normalized = ConfigurationMigration.Normalize(ConfigurationMigration.Clone((PluginConfiguration)configuration));
+            ProviderValidation.ValidateChanges(normalized, ConfigurationMigration.Normalize(ConfigurationMigration.Clone(Configuration)));
             // Dashboard snapshots may predate a completed link. Link mutations use PersistConfiguration.
             PreserveAccountState(normalized.OidConfigs, Configuration.OidConfigs);
             PreserveAccountState(normalized.SamlConfigs, Configuration.SamlConfigs);
@@ -92,6 +93,7 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
             if (saved.TryGetValue(entry.Key, out var current))
             {
                 entry.Value.SubjectLinks = current.SubjectLinks;
+                entry.Value.SubjectLinkDetails = current.SubjectLinkDetails;
                 entry.Value.CanonicalLinks = current.CanonicalLinks;
                 entry.Value.UserRoleSnapshots = current.UserRoleSnapshots;
             }
@@ -184,6 +186,11 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
             {
                 Name = "complete.js",
                 EmbeddedResourcePath = $"{GetType().Namespace}.Views.complete.js"
+            },
+            new PluginPageInfo
+            {
+                Name = "menu.js",
+                EmbeddedResourcePath = $"{GetType().Namespace}.Views.menu.js"
             },
         };
     }

@@ -10,14 +10,15 @@ Turn on **Manage Jellyfin permissions** at the top of **Permissions** to apply
 the settings below at each sign-in. When it is off, all existing Jellyfin
 permissions stay unchanged. The roles in **Sign-in** still control who may sign in.
 
-Choose what to edit under **Edit permissions for**:
+The rule list shows **Everyone** first, then your groups, then user overrides.
+Select a row to edit it below the list:
 
 - **Everyone**: library access for every user of the provider, and each
   permission set On or Off, or left as **Keep Jellyfin setting**.
-- **Groups**: enter an exact role/group name from the provider's role claim. Tick
+- **Groups**: add an exact role/group name from the provider's role claim. Tick
   the permissions the group grants, and optionally add libraries or grant all
   libraries. Groups can only add; they never turn a permission off.
-- **User overrides**: select an existing Jellyfin user. Set individual
+- **User overrides**: add an existing Jellyfin user. Set individual
   permissions On or Off and replace their library access, or choose **Keep this
   user's Jellyfin permissions** to exempt the account from synchronization.
   Overrides use the user's ID and survive a local username change.
@@ -93,16 +94,18 @@ next sign-in.
 
 ## Preview a group or user
 
-Enter one or more groups under **Groups / roles to test** and choose **Preview
-permissions**, or use the preview button in a group/user rule. Select a Jellyfin
-user to compare the result with their current settings and apply user overrides.
-Leave the user blank for a role-only preview; unmanaged values then show
-**Jellyfin default** because there is no existing account to compare.
+Choose a **User** (or a new user), enter their **Groups**, and choose **Preview
+sign-in**, or use the preview button on a group or user rule. The preview uses
+the current settings, including unsaved changes.
 
-The preview lists every permission flag, its current value, its value after SSO,
-the change, and the winning rule. It also shows the resulting libraries and
-whether admission or a Jellyfin account restriction blocks the sign-in. Turning
-synchronization off or exempting a user makes the preview retain current values.
+The result says which groups matched and whether a user override applies, then
+lists only what would change: each permission's value before and after the
+sign-in, and the rule responsible. For a new user it lists every permission SSO
+sets. **Libraries** shows the resulting libraries, marking ones that are added or
+removed. **All permissions** expands to the full list of Jellyfin permission
+flags. If admission or a Jellyfin account restriction would block the sign-in,
+the preview says so instead. Turning synchronization off or exempting a user
+makes the preview report that their permissions stay as they are.
 
 For a user, the editor starts with the groups observed at their last successful
 SSO sign-in to this provider and displays the timestamp. This is a snapshot, not

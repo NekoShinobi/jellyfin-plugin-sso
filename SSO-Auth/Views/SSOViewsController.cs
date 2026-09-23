@@ -26,7 +26,7 @@ public class SSOViewsController : ControllerBase
         }
 
         Response.Headers["Referrer-Policy"] = "no-referrer";
-        Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'";
         return File(stream, MimeTypes.GetMimeType(view.EmbeddedResourcePath));
     }
 }

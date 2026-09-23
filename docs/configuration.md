@@ -25,6 +25,15 @@ public URL with your identity provider. Enter roles and scopes one per line.
 **Save changes** applies settings to new sign-ins without restarting Jellyfin.
 A failed save leaves your draft available to retry.
 
+Newly enabled or changed enabled providers are checked before saving: OIDC needs
+an authority URL and client ID; SAML needs an HTTPS endpoint, issuer, client ID,
+stable NameID format, and valid signing certificate. Errors identify the field
+that needs attention, and rejected updates preserve the saved configuration.
+Disabled providers can remain incomplete drafts. Existing configurations still
+load, and unchanged legacy providers do not block saves to other providers or
+account-link updates. Editing an enabled legacy provider requires repairing its
+required settings first.
+
 **Delete** asks for confirmation and removes that provider's settings and links.
 It does not delete Jellyfin accounts or watch history. Turn off **Allow sign-in**
 instead if you only want to pause the provider. **Account connections** opens the
@@ -91,6 +100,8 @@ library selection, and how settings from earlier releases are converted.
 | `OidClientId`, `OidSecret`   | string       | Application ID and client secret.                                                      |
 | `OidScopes`                  | string array | Additional scopes; `openid profile` are already requested.                             |
 | `RoleClaim`                  | string       | Role claim path, such as `groups` or `realm_access.roles`.                             |
+| `UseZitadelRoles`            | boolean      | Opts into organization-scoped ZITADEL object-key roles; false by default.              |
+| `ZitadelOrganizationIds`     | string array | Exact organization IDs allowed for ZITADEL roles; required when that mode is enabled.  |
 | `DefaultUsernameClaim`       | string       | Username claim; falls back to `preferred_username` when unset.                         |
 | `AvatarUrlFormat`            | string       | Optional avatar URL, with substitutions such as `@{picture}`.                          |
 | `DisablePushedAuthorization` | boolean      | Disables PAR where provider compatibility requires it.                                 |
@@ -111,6 +122,35 @@ be present in the validated ID token or UserInfo response; an access-token-only
 mapper is insufficient. With `DoNotLoadProfile=true`, required claims must be
 in the ID token. Request `email` in `OidScopes` if using an email username claim
 that requires that scope; a missing username claim falls back to `sub`.
+
+### ZITADEL role objects
+
+For a claim shaped like this, enable **Read ZITADEL role objects** and set
+`RoleClaim` to the actual claim path in your validated identity:
+
+```json
+{
+  "jellyfin_user": { "org-a": "example.test" },
+  "jellyfin_admin": { "org-b": "other.test" }
+}
+```
+
+Set `ZitadelOrganizationIds` to `["org-a"]` to read only `jellyfin_user` from
+this example. IDs are case-sensitive; organization domains and display names
+are not IDs. At least one nonblank ID is required. A role present in any listed
+organization is included once; other organizations contribute no roles.
+The claim must be an object mapping role names to organization objects whose
+values are strings. Ordinary string/list claims remain the default, and object
+keys never become roles without this opt-in.
+
+Set `Roles` to the roles that may sign in, then use the same role names in
+permission rules. A missing claim or no matching organization produces no roles;
+a nonempty admission list therefore denies sign-in. An empty `Roles` list still
+admits any validated identity, as with other providers. With permission
+synchronization enabled, grants from removed roles are revoked at the next
+successful sign-in. Existing sessions are not immediately revoked.
+
+### Token validation
 
 The ID token must be a signed JWT using RS256/384/512, PS256/384/512, or
 ES256/384/512. Encrypted ID tokens (JWE) are unsupported: the plugin has no
@@ -155,6 +195,18 @@ start login from Jellyfin so the response has a browser-bound request.
 | `NewPath`                 | boolean         | Legacy field retained; the start route now selects its matching callback.                                 |
 | `CanonicalLinks`          | dictionary      | Saved provider username → Jellyfin GUID mappings, honored when no stable identity link exists.            |
 
+`DefaultProvider` has surrounding whitespace removed on XML load and API/dashboard
+updates; a blank value leaves the user's authentication provider unchanged.
+Nonblank IDs must still match a registered Jellyfin authentication provider at
+sign-in. Client secrets are not trimmed.
+
+New `PortOverride` values must be null/blank or an integer from 1 to 65535.
+Existing `0` and `-1` values retain their old URL-builder behavior until that
+field is changed: `0` explicitly selects port zero, and `-1` uses the scheme's
+default port. Null uses the incoming request port. Replace legacy sentinels with
+blank or an explicit valid port when updating the public URL; new sentinel values
+are rejected. Loading an old XML configuration does not apply save-time validation.
+
 `SubjectLinks` stores hashed stable identity keys mapped to Jellyfin GUIDs. Preserve
 both link dictionaries when replacing a provider through the API. Dashboard
 settings saves preserve the latest server-side links automatically.
@@ -164,6 +216,13 @@ Booleans default to false; API callers should provide all intended policy values
 Role normalization accepts repeated string claims, JSON string arrays, and nested
 objects. Malformed role values reject login instead of retaining old privileges.
 A missing configured username claim falls back to the stable subject for new users.
+
+An `AvatarUrlFormat` consisting of one exact placeholder, such as `@{picture}`
+or `@{avatar-url}`, uses that claim's complete URL. If the claim is absent, no
+avatar is requested. Embedded placeholders are URL-escaped components: for
+example, `https://images.example/@{sub}?name=@{preferred_username}` escapes slashes
+and query separators in the claim values. Whole-URL substitution does not bypass
+the download restrictions below.
 
 Avatar downloads are optional HTTPS requests with a five-second deadline, a 2 MiB
 body limit, and a 4096 × 4096 image limit. Only public addresses and PNG/JPEG/WebP

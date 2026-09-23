@@ -109,8 +109,8 @@ public class ControllerTests
         var providers = new ProviderStore(() => config, c => config = c);
         var controller = ConfigurationController(providers);
         var result = mode == "OID"
-            ? await controller.AddOid("test", new OidConfig { Enabled = true })
-            : await controller.AddSaml("test", new SamlConfig { Enabled = true });
+            ? await controller.AddOid("test", ProviderFixtures.Oid())
+            : await controller.AddSaml("test", ProviderFixtures.Saml());
         Assert.IsType<NoContentResult>(result);
         Assert.True(providers.Get(mode, "test").Enabled);
         Assert.IsType<OkObjectResult>(await controller.Get(mode));

@@ -35,9 +35,9 @@ node --test tests/*.test.mjs
 ```
 
 The Python tests exercise packaging, dependency inclusion, checksums, and catalog
-updates. They do not establish runtime authentication correctness. The prior
-audit probes under `audits/` reproduce inherited defects; they are not a passing
-login test suite and are not published as documentation.
+updates. They do not establish runtime authentication correctness. Authentication,
+migration, and browser regression checks live under `tests/`. Remaining fixes,
+investigations, and deferred features are tracked in the repository's root `TODO.md`.
 
 ## Build a local package
 

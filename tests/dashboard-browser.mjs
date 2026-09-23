@@ -106,6 +106,40 @@ export async function dashboardChecks(browser, state, screenshots) {
     assert.equal(saved.EnableAuthorization, false);
     await permissionChecks(page, state);
 
+    // Organization-scoped roles require an explicit allowlist, then survive reload.
+    await page.getByRole("tab", { name: "Sign-in", exact: true }).click();
+    await page
+      .locator("label")
+      .filter({ has: page.locator("#UseZitadelRoles") })
+      .click();
+    await page.locator("#SaveProvider").click();
+    assert.equal(
+      await page
+        .locator("#ZitadelOrganizationIds")
+        .evaluate((node) => node.validity.valid),
+      false,
+    );
+    assert.equal(
+      (await configuration()).OidConfigs.Household.UseZitadelRoles,
+      false,
+    );
+    await page.locator("#ZitadelOrganizationIds").fill("org-a\norg-b");
+    await page.locator("#SaveProvider").click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Saved “Household”" })
+      .waitFor();
+    const scoped = (await configuration()).OidConfigs.Household;
+    assert.equal(scoped.UseZitadelRoles, true);
+    assert.deepEqual(scoped.ZitadelOrganizationIds, ["org-a", "org-b"]);
+    await page.reload();
+    await page.locator('#sso-provider-list[aria-busy="false"]').waitFor();
+    assert.equal(await page.locator("#UseZitadelRoles").isChecked(), true);
+    assert.equal(
+      await page.locator("#ZitadelOrganizationIds").inputValue(),
+      "org-a\norg-b",
+    );
+
     // New provider fields do not inherit secrets or permission toggles.
     await page
       .getByRole("button", { name: "Add provider", exact: true })
@@ -121,8 +155,9 @@ export async function dashboardChecks(browser, state, screenshots) {
       false,
     );
     await page.locator("#OidProviderName").fill("Office");
-    await page.locator("#OidEndpoint").fill("https://office.example.test/");
-    await page.locator("#OidClientId").fill("office-client");
+    // An incomplete disabled provider is a saveable draft.
+    await page.locator("#OidEndpoint").fill("");
+    await page.locator("#OidClientId").fill("");
     await page
       .locator("label")
       .filter({ has: page.locator("#Enabled") })
@@ -155,6 +190,24 @@ export async function dashboardChecks(browser, state, screenshots) {
       .click();
     assert.equal(await page.locator("#OidSecret").inputValue(), "");
     assert.equal(await page.locator("#Enabled").isChecked(), false);
+
+    // Enabling the incomplete draft is rejected before a configuration write.
+    await page
+      .locator("label")
+      .filter({ has: page.locator("#Enabled") })
+      .click();
+    await page.locator("#SaveProvider").click();
+    assert.equal(
+      await page
+        .locator("#OidEndpoint")
+        .evaluate((node) => node.validity.valid),
+      false,
+    );
+    assert.equal((await configuration()).OidConfigs.Office.Enabled, false);
+    await page
+      .locator("label")
+      .filter({ has: page.locator("#Enabled") })
+      .click();
 
     // A failed write is visible and leaves the user's draft editable.
     await page.route("**/Plugins/*/Configuration", (route) =>

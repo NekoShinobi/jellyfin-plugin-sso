@@ -22,12 +22,7 @@ public sealed class OidcAdapter(IHttpClientFactory clients)
 {
     public OidcClient Client(OidConfig config, string callback, string? nonce = null)
     {
-        if (!Uri.TryCreate(config.OidEndpoint?.Trim(), UriKind.Absolute, out var authority)
-            || (authority.Scheme != "https" && !(config.DisableHttps && authority.Scheme == "http"))
-            || string.IsNullOrWhiteSpace(config.OidClientId))
-        {
-            throw new SsoException("Configure a valid OIDC authority and client ID.");
-        }
+        var authority = ProviderValidation.OidcAuthority(config);
 
         var options = new OidcClientOptions
         {
@@ -78,13 +73,15 @@ public sealed class OidcAdapter(IHttpClientFactory clients)
         if (!string.IsNullOrWhiteSpace(config.AvatarUrlFormat))
         {
             avatar = result.User.Claims.Aggregate(config.AvatarUrlFormat, (value, claim) => value.Replace("@{" + claim.Type + "}", Uri.EscapeDataString(claim.Value), StringComparison.Ordinal));
-            if (config.AvatarUrlFormat == "@{picture}")
+            var format = config.AvatarUrlFormat;
+            if (format.StartsWith("@{", StringComparison.Ordinal) && format.EndsWith('}')
+                && !format.AsSpan(2, format.Length - 3).ContainsAny('{', '}'))
             {
-                avatar = result.User.FindFirst("picture")?.Value;
+                avatar = result.User.FindFirst(format[2..^1])?.Value;
             }
         }
 
-        return new ExternalIdentity(issuer, subject, name, IdentityPolicy.ReadRoles(result.User.Claims, config.RoleClaim), avatar);
+        return new ExternalIdentity(issuer, subject, name, IdentityPolicy.ReadOidcRoles(result.User.Claims, config), avatar);
     }
 }
 
@@ -92,22 +89,8 @@ public sealed class SamlAdapter(LoginTransactions transactions, TimeProvider clo
 {
     private static Saml2Configuration Configuration(SamlConfig config)
     {
-        if (!Uri.TryCreate(config.SamlEndpoint, UriKind.Absolute, out var endpoint) || endpoint.Scheme != "https"
-            || string.IsNullOrWhiteSpace(config.SamlIssuer) || string.IsNullOrWhiteSpace(config.SamlClientId)
-            || string.IsNullOrWhiteSpace(config.SamlNameIdFormat) || config.SamlNameIdFormat.EndsWith(":transient", StringComparison.Ordinal))
-        {
-            throw new SsoException("Configure the SAML HTTPS endpoint, issuer, client ID, and stable NameID format. Legacy settings and links have been preserved.");
-        }
-
-        X509Certificate2 certificate;
-        try
-        {
-            certificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(config.SamlCertificate));
-        }
-        catch (Exception exception) when (exception is FormatException or System.Security.Cryptography.CryptographicException)
-        {
-            throw new SsoException("The configured SAML signing certificate is invalid.");
-        }
+        var endpoint = ProviderValidation.SamlEndpoint(config);
+        var certificate = SigningCertificate(config);
 
         var settings = new Saml2Configuration
         {
@@ -121,6 +104,26 @@ public sealed class SamlAdapter(LoginTransactions transactions, TimeProvider clo
         settings.SignatureValidationCertificates.Add(certificate);
         settings.AllowedAudienceUris.Add(config.SamlClientId);
         return settings;
+    }
+
+    internal static X509Certificate2 SigningCertificate(SamlConfig config)
+    {
+        if (string.IsNullOrWhiteSpace(config.SamlCertificate))
+        {
+            throw new SsoException("The configured SAML signing certificate is invalid.");
+        }
+
+        X509Certificate2 certificate;
+        try
+        {
+            certificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(config.SamlCertificate));
+        }
+        catch (Exception exception) when (exception is FormatException or System.Security.Cryptography.CryptographicException)
+        {
+            throw new SsoException("The configured SAML signing certificate is invalid.");
+        }
+
+        return certificate;
     }
 
     public (string Id, string Url) Start(SamlConfig config, string callback, string relayState)

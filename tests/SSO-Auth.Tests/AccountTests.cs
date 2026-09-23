@@ -93,6 +93,35 @@ public class AccountTests
         Assert.Equal(user.Id, f.Config.OidConfigs["second"].SubjectLinks[identity.Key]);
     }
 
+    [Fact]
+    public async Task SignInAndLinkingRecordDisplayDetailsForTheAccountPage()
+    {
+        var f = new Fixture(); var user = f.AddUser("existing-local-user");
+        await f.Service.Link(f.Completion(user.Id), user.Id);
+        var detail = f.Config.OidConfigs["test"].SubjectLinkDetails[f.Identity.Key];
+        Assert.Equal(f.Identity.DisplayName, detail.Username);
+        Assert.Equal(f.Identity.Issuer, detail.Issuer);
+        Assert.NotNull(detail.LinkedAt); Assert.Null(detail.LastSignInAt);
+        var linkedAt = detail.LinkedAt;
+        await f.Service.Login(f.Completion(), f.Client, "127.0.0.1");
+        detail = f.Config.OidConfigs["test"].SubjectLinkDetails[f.Identity.Key];
+        Assert.Equal(linkedAt, detail.LinkedAt); Assert.NotNull(detail.LastSignInAt);
+        // Details never outlive their link.
+        f.Config.OidConfigs["test"].SubjectLinks.Clear();
+        ConfigurationMigration.NormalizeProvider(f.Config.OidConfigs["test"]);
+        Assert.Empty(f.Config.OidConfigs["test"].SubjectLinkDetails);
+    }
+
+    [Fact]
+    public void MenuScriptIsAddedToTheWebClientOnce()
+    {
+        var index = "<html><head><title>Jellyfin</title></head><body></body></html>";
+        var once = WebMenuIntegration.AddMenuScript(new WebFileContents { Contents = index });
+        Assert.Contains("<script defer src=\"../SSOViews/menu.js\"></script></head>", once);
+        Assert.Equal(once, WebMenuIntegration.AddMenuScript(new WebFileContents { Contents = once }));
+        Assert.Equal("no head", WebMenuIntegration.AddMenuScript(new WebFileContents { Contents = "no head" }));
+    }
+
     private sealed class Crypto : ICryptoProvider
     {
         public string DefaultHashMethod => "SHA256";
@@ -422,6 +451,29 @@ public class AccountTests
         var preview = JsonSerializer.SerializeToElement(f.Service.PreviewPermissions(new() { Configuration = f.Config.OidConfigs["test"], UserId = user.Id, Roles = ["allowed"] }));
         Assert.False(preview.GetProperty("Admitted").GetBoolean());
         Assert.All(preview.GetProperty("Permissions").EnumerateArray(), row => Assert.False(row.GetProperty("Managed").GetBoolean()));
+    }
+
+    [Theory]
+    [InlineData("  ldap  ", "ldap")]
+    [InlineData("   ", "local")]
+    [InlineData(null, "local")]
+    [InlineData("  missing  ", null)]
+    public async Task NormalizedFallbackIdsStillRequireARegisteredProvider(string? fallback, string? expected)
+    {
+        var f = new Fixture(); var user = f.AddUser(f.Identity.DisplayName);
+        user.AuthenticationProviderId = "local";
+        f.Config.OidConfigs["test"].DefaultProvider = fallback!;
+        if (expected is null)
+        {
+            await Assert.ThrowsAsync<SsoException>(() => f.Service.Login(f.Completion(), f.Client, "127.0.0.1"));
+            Assert.Equal("local", user.AuthenticationProviderId);
+            f.Sessions.Verify(s => s.AuthenticateDirect(It.IsAny<AuthenticationRequest>()), Times.Never);
+        }
+        else
+        {
+            await f.Service.Login(f.Completion(), f.Client, "127.0.0.1");
+            Assert.Equal(expected, user.AuthenticationProviderId);
+        }
     }
 
     [Fact]

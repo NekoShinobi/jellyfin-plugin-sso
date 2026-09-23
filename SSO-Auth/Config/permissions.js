@@ -11,7 +11,7 @@ export function createPermissionEditor(root, options) {
   } = options;
   let draft,
     snapshots,
-    scope = "defaults",
+    // The rule being edited; null means Everyone.
     editing = null,
     revision = 0;
   let uid = 0;
@@ -88,21 +88,10 @@ export function createPermissionEditor(root, options) {
   function invalidate() {
     revision++;
     result.replaceChildren();
-    previewStatus.textContent =
-      "Run preview to see the effect of the current draft.";
+    previewStatus.hidden = true;
   }
-  const note = el(
-    "p",
-    "sso-note",
-    "Everyone sets the starting point. Matching groups can only add permissions and libraries. A user override wins last. Changes apply at the next sign-in.",
-  );
-  const scopeSelect = select([
-    ["defaults", "Everyone"],
-    ["groups", "Groups"],
-    ["users", "User overrides"],
-  ]);
-  scopeSelect.id = "sso-permission-scope";
-  const scopeField = field("Edit permissions for", scopeSelect);
+  // The rule list shows Everyone first, then groups, then per-user overrides.
+  const list = el("div", "sso-rule-list");
   const editor = el("div", "sso-permission-rules");
   const error = el("p", "sso-status sso-status-error");
   error.setAttribute("role", "alert");
@@ -111,11 +100,6 @@ export function createPermissionEditor(root, options) {
     error.textContent = message;
     error.hidden = !message;
   }
-  scopeSelect.addEventListener("change", () => {
-    scope = scopeSelect.value;
-    editing = null;
-    renderEditor();
-  });
 
   // kind is "defaults" (Keep/On/Off), "group" (grant checkboxes) or "user" (Inherit/On/Off).
   function matrix(container, values, kind) {
@@ -268,26 +252,81 @@ export function createPermissionEditor(root, options) {
     );
   }
 
-  function renderEditor() {
-    editor.replaceChildren();
-    showError();
-    if (scope === "defaults") {
-      editor.append(
-        el("h3", "", "Everyone"),
-        el(
-          "p",
-          "fieldDescription",
-          "Applies to every user of this provider. Keep a permission with Jellyfin, or set it On or Off. A permission that a group or user rule uses stays managed, Off unless you choose On.",
+  const folderName = (id) =>
+    folders.find((f) => f.Id === id)?.Name || `Unavailable library (${id})`;
+  const permissionName = (key) =>
+    definitions.find((p) => p.Key === key)?.Name || key;
+  function shortList(items, empty = "") {
+    if (!items.length) return empty;
+    return items.length > 3
+      ? `${items.slice(0, 3).join(", ")} +${items.length - 3} more`
+      : items.join(", ");
+  }
+  function summary(rule, kind) {
+    const parts = [];
+    const folderList = (ids) => shortList(ids.map(folderName), "no libraries");
+    if (kind === "defaults") {
+      parts.push(
+        rule.EnableAllFolders
+          ? "All libraries"
+          : folderList(rule.EnabledFolders),
+      );
+      const managed = Object.keys(rule.PermissionDefaults).length;
+      parts.push(`${managed} permission${managed === 1 ? "" : "s"} managed`);
+      return parts.join(" · ");
+    }
+    if (kind === "user" && rule.PreservePermissions)
+      return "Keeps their Jellyfin permissions";
+    const keys = Object.keys(rule.Permissions);
+    if (kind === "group") {
+      if (keys.length) parts.push(shortList(keys.map(permissionName)));
+      if (rule.LibraryMode === "All") parts.push("All libraries");
+      if (rule.LibraryMode === "Selected")
+        parts.push("+ " + folderList(rule.Folders));
+      return parts.join(" · ") || "Grants nothing yet";
+    }
+    if (keys.length)
+      parts.push(
+        shortList(
+          keys.map(
+            (k) => `${permissionName(k)} ${rule.Permissions[k] ? "on" : "off"}`,
+          ),
         ),
       );
-      libraries(editor, draft, "defaults");
-      matrix(editor, draft.PermissionDefaults, "defaults");
-      return;
-    }
-    const isUser = scope === "users";
-    const rules = isUser ? draft.UserPermissions : draft.GroupPermissions;
-    const title = isUser ? "User overrides" : "Groups";
-    editor.append(el("h3", "", title));
+    if (rule.LibraryMode === "All") parts.push("All libraries");
+    if (rule.LibraryMode === "Selected")
+      parts.push("Only " + folderList(rule.Folders));
+    return parts.join(" · ") || "No overrides yet";
+  }
+
+  function ruleRow(icon, name, detail, target, onRemove) {
+    const row = el("div", "sso-rule-row");
+    row.classList.toggle("is-selected", editing === target);
+    const open = el("button", "sso-rule-open");
+    // The shared element helper styles every button as a raised Jellyfin button.
+    open.classList.remove("emby-button", "raised", "button-flat");
+    open.type = "button";
+    open.setAttribute("aria-label", `Edit ${name}`);
+    open.setAttribute("aria-pressed", String(editing === target));
+    const glyph = el("span", "material-icons sso-rule-icon", icon);
+    glyph.setAttribute("aria-hidden", "true");
+    const body = el("span", "sso-rule-text");
+    body.append(
+      el("span", "sso-rule-name", name),
+      el("span", "sso-rule-detail sso-muted", detail),
+    );
+    open.append(glyph, body);
+    open.addEventListener("click", () => {
+      editing = target;
+      renderEditor();
+      details.scrollIntoView({ block: "nearest" });
+    });
+    row.append(open);
+    if (onRemove) row.append(iconButton("delete", `Remove ${name}`, onRemove));
+    return row;
+  }
+
+  function addRow(isUser, rules) {
     const target = isUser
       ? select([
           ["", "Choose a Jellyfin user"],
@@ -295,7 +334,7 @@ export function createPermissionEditor(root, options) {
         ])
       : input();
     target.id = isUser ? "sso-permission-new-user" : "sso-permission-new-group";
-    if (!isUser) target.placeholder = "e.g. family";
+    if (!isUser) target.placeholder = "Group name from the role claim";
     const add = button(isUser ? "Add user override" : "Add group", () => {
       const value = target.value.trim();
       if (!value)
@@ -312,7 +351,7 @@ export function createPermissionEditor(root, options) {
         )
       )
         return showError(
-          "A rule for this group or user already exists. Edit it below.",
+          "A rule for this group or user already exists. Select it in the list.",
         );
       const rule = {
         Permissions: {},
@@ -327,124 +366,189 @@ export function createPermissionEditor(root, options) {
       changed();
       renderEditor();
     });
-    const addRow = el("div", "sso-rule-add");
-    addRow.append(
+    const row = el("div", "sso-rule-add");
+    row.append(
       field(isUser ? "Jellyfin user" : "Group / role name", target),
       add,
     );
-    editor.append(addRow);
-    const ruleList = el("div", "paperList");
-    if (!rules.length)
-      ruleList.append(
-        el(
-          "p",
-          "sso-empty",
-          isUser
-            ? "No user overrides. Users get the Everyone and group settings."
-            : "No groups. Add a group to grant its members permissions or libraries.",
+    return row;
+  }
+
+  function section(title, description, rows, empty, adder) {
+    const box = el("section", "sso-rule-section");
+    box.append(el("h4", "sso-rule-section-title", title));
+    if (description)
+      box.append(
+        el("p", "sso-muted sso-rule-section-description", description),
+      );
+    const items = el("div", "sso-rule-items");
+    if (rows.length) items.append(...rows);
+    else items.append(el("p", "sso-empty sso-muted", empty));
+    box.append(items);
+    if (adder) box.append(adder);
+    return box;
+  }
+
+  function renderList() {
+    const remove = (rules, rule) => () => {
+      rules.splice(rules.indexOf(rule), 1);
+      if (editing === rule) editing = null;
+      changed();
+      renderEditor();
+    };
+    list.replaceChildren(
+      el("div", "sso-rule-items sso-rule-everyone"),
+      section(
+        "Groups",
+        "Members get everything their groups grant, on top of Everyone.",
+        draft.GroupPermissions.map((rule) =>
+          ruleRow(
+            "group",
+            rule.Role,
+            summary(rule, "group"),
+            rule,
+            remove(draft.GroupPermissions, rule),
+          ),
         ),
-      );
-    for (const rule of rules) {
-      const name = isUser ? userName(rule.UserId) : rule.Role;
-      const row = el("div", "sso-provider-row listItem listItem-border");
-      const body = el("div", "listItemBody");
-      body.append(
-        el("strong", "listItemBodyText", name),
-        el(
-          "p",
-          "sso-muted",
-          rule.PreservePermissions
-            ? "Keep this user's Jellyfin permissions"
-            : isUser
-              ? `${Object.keys(rule.Permissions).length} permission overrides · ${rule.LibraryMode === "Inherit" ? "Inherited libraries" : rule.LibraryMode === "All" ? "All libraries" : `${rule.Folders.length} selected libraries`}`
-              : `${Object.keys(rule.Permissions).length} permissions granted · ${rule.LibraryMode === "Inherit" ? "No additional libraries" : rule.LibraryMode === "All" ? "All libraries" : `${rule.Folders.length} libraries added`}`,
+        "No groups yet.",
+        addRow(false, draft.GroupPermissions),
+      ),
+      el("hr", "sso-rule-divider"),
+      section(
+        "User overrides",
+        "Exceptions for one account. They win over Everyone and groups.",
+        draft.UserPermissions.map((rule) =>
+          ruleRow(
+            "person",
+            userName(rule.UserId),
+            summary(rule, "user"),
+            rule,
+            remove(draft.UserPermissions, rule),
+          ),
         ),
-      );
-      const actions = el("div", "sso-actions");
-      actions.append(
-        iconButton("edit", `Edit ${name}`, () => {
-          editing = rule;
-          renderEditor();
-        }),
-        iconButton("delete", `Remove ${name}`, () => {
-          rules.splice(rules.indexOf(rule), 1);
-          editing = null;
-          changed();
-          renderEditor();
-        }),
-      );
-      row.append(body, actions);
-      ruleList.append(row);
+        "No user overrides.",
+        addRow(true, draft.UserPermissions),
+      ),
+    );
+    list.firstChild.append(
+      ruleRow("public", "Everyone", summary(draft, "defaults"), null),
+    );
+  }
+
+  const details = el("section", "sso-rule-editor");
+  function renderEditor() {
+    showError();
+    if (
+      editing &&
+      !draft.GroupPermissions.includes(editing) &&
+      !draft.UserPermissions.includes(editing)
+    )
+      editing = null;
+    renderList();
+    details.replaceChildren();
+    const isUser = draft.UserPermissions.includes(editing);
+    const kind = !editing ? "defaults" : isUser ? "user" : "group";
+    const name = !editing
+      ? "Everyone"
+      : isUser
+        ? userName(editing.UserId)
+        : editing.Role;
+    const heading = el("div", "sso-rule-editor-heading");
+    const glyph = el(
+      "span",
+      "material-icons sso-rule-icon",
+      { defaults: "public", group: "group", user: "person" }[kind],
+    );
+    glyph.setAttribute("aria-hidden", "true");
+    const text = el("div");
+    text.append(
+      el("h3", "sso-rule-editor-title", name),
+      el(
+        "p",
+        "sso-muted",
+        {
+          defaults:
+            "Applies to every user of this provider. Leave a permission as Keep Jellyfin setting to let Jellyfin manage it.",
+          group: "Tick what members of this group get.",
+          user: "Set a permission On or Off for this account only.",
+        }[kind],
+      ),
+    );
+    heading.append(glyph, text);
+    details.append(heading);
+    if (kind === "defaults") {
+      libraries(details, draft, "defaults");
+      matrix(details, draft.PermissionDefaults, "defaults");
+      editor.replaceChildren(list, details);
+      return;
     }
-    editor.append(ruleList);
-    if (editing && rules.includes(editing)) {
-      const rule = editing;
-      const name = isUser ? userName(rule.UserId) : rule.Role;
-      const details = el("div", "sso-rule-editor");
-      details.append(
-        el("h4", "", isUser ? `Overrides for ${name}` : `Granted to ${name}`),
+    const rule = editing;
+    const ruleFields = el("div");
+    if (isUser) {
+      const preserve = select(
+        [
+          ["false", "Apply Everyone, group, and user rules"],
+          ["true", "Keep this user's Jellyfin permissions"],
+        ],
+        String(Boolean(rule.PreservePermissions)),
       );
-      const ruleFields = el("div");
-      if (isUser) {
-        const preserve = select(
-          [
-            ["false", "Apply Everyone, group, and user rules"],
-            ["true", "Keep this user's Jellyfin permissions"],
-          ],
-          String(Boolean(rule.PreservePermissions)),
-        );
-        preserve.id = "sso-permission-preserve-user";
-        preserve.addEventListener("change", () => {
-          rule.PreservePermissions = preserve.value === "true";
-          ruleFields.hidden = rule.PreservePermissions;
-          changed();
-        });
-        details.append(field("Permission management", preserve));
-        ruleFields.hidden = Boolean(rule.PreservePermissions);
-      }
-      libraries(ruleFields, rule, isUser ? "user" : "group");
-      matrix(ruleFields, rule.Permissions, isUser ? "user" : "group");
-      const targetUser = isUser
-        ? users.find((u) => normalizeId(u.Id) === normalizeId(rule.UserId))
-        : null;
-      const unavailableUser = isUser && !targetUser;
-      const preview = button(
-        "Preview this " + (isUser ? "user" : "group"),
-        () => {
-          if (unavailableUser) return;
-          if (isUser) {
-            previewUser.value = targetUser.Id;
-            useSnapshot();
-          } else {
-            previewUser.value = "";
-            previewRoles.value = rule.Role;
-            membership.textContent = "Testing the selected group.";
-          }
-          runPreview();
-          previewHeading.scrollIntoView({ block: "start" });
-        },
-      );
-      preview.disabled = unavailableUser;
-      preview.dataset.unavailableUser = String(unavailableUser);
-      details.append(ruleFields, preview);
-      if (unavailableUser) {
-        const explanation = el(
-          "p",
-          "fieldDescription",
-          "Preview is unavailable because this Jellyfin user is not in the user list. Reload the page to refresh the list.",
-        );
-        explanation.id = "sso-preview-unavailable-user";
-        preview.setAttribute("aria-describedby", explanation.id);
-        details.append(explanation);
-      }
-      editor.append(details);
+      preserve.id = "sso-permission-preserve-user";
+      preserve.addEventListener("change", () => {
+        rule.PreservePermissions = preserve.value === "true";
+        ruleFields.hidden = rule.PreservePermissions;
+        changed();
+        renderList();
+      });
+      details.append(field("Permission management", preserve));
+      ruleFields.hidden = Boolean(rule.PreservePermissions);
     }
+    libraries(ruleFields, rule, kind);
+    matrix(ruleFields, rule.Permissions, kind);
+    const targetUser = isUser
+      ? users.find((u) => normalizeId(u.Id) === normalizeId(rule.UserId))
+      : null;
+    const unavailableUser = isUser && !targetUser;
+    const preview = button(
+      "Preview this " + (isUser ? "user" : "group"),
+      () => {
+        if (unavailableUser) return;
+        if (isUser) {
+          previewUser.value = targetUser.Id;
+          useSnapshot();
+        } else {
+          previewUser.value = "";
+          previewRoles.value = rule.Role;
+          membership.textContent = "Testing the selected group.";
+        }
+        runPreview();
+        previewHeading.scrollIntoView({ block: "start" });
+      },
+    );
+    preview.disabled = unavailableUser;
+    preview.dataset.unavailableUser = String(unavailableUser);
+    details.append(ruleFields, preview);
+    if (unavailableUser) {
+      const explanation = el(
+        "p",
+        "fieldDescription",
+        "Preview is unavailable because this Jellyfin user is not in the user list. Reload the page to refresh the list.",
+      );
+      explanation.id = "sso-preview-unavailable-user";
+      preview.setAttribute("aria-describedby", explanation.id);
+      details.append(explanation);
+    }
+    editor.replaceChildren(list, details);
   }
 
   const previewSection = el("section", "sso-permission-preview");
-  const previewHeading = el("h3", "", "Preview effective permissions");
+  const previewHeading = el("h3", "", "Preview");
+  const previewIntro = el(
+    "p",
+    "sso-muted",
+    "See what a sign-in would do with the current, unsaved rules.",
+  );
   const previewUser = select([
-    ["", "Role-only preview (no existing user)"],
+    ["", "A new user (no existing account)"],
     ...users.map((u) => [u.Id, u.Name]),
   ]);
   previewUser.id = "sso-preview-user";
@@ -452,137 +556,244 @@ export function createPermissionEditor(root, options) {
   previewRoles.rows = 3;
   previewRoles.id = "sso-preview-roles";
   previewRoles.placeholder = "One group / role per line";
-  const membership = el(
-    "p",
-    "fieldDescription",
-    "Enter groups to test. This does not query or change membership at your identity provider.",
-  );
+  const membership = el("p", "fieldDescription");
+  const defaultMembership =
+    "Enter the groups the identity provider would send. Nothing is changed at the provider.";
   function useSnapshot() {
     const snapshot = snapshots[normalizeId(previewUser.value)];
     previewRoles.value = (snapshot?.Roles || []).join("\n");
     membership.textContent = snapshot
-      ? `Groups last seen ${new Date(snapshot.ObservedAt).toLocaleString()}. Membership may have changed; edit the groups to test another scenario.`
-      : "No SSO group history for this user and provider. Enter their groups to preview the result.";
+      ? `Groups from their last sign-in (${new Date(snapshot.ObservedAt).toLocaleString()}). Edit them to try another scenario.`
+      : "This user hasn't signed in with this provider yet. Enter their groups.";
     invalidate();
   }
   previewUser.addEventListener("change", useSnapshot);
   previewRoles.addEventListener("input", invalidate);
   const previewStatus = el("p", "sso-status");
   previewStatus.setAttribute("role", "status");
-  const result = el("div");
-  const previewButton = button("Preview permissions", runPreview);
+  previewStatus.hidden = true;
+  const result = el("div", "sso-preview-output");
+  const previewButton = button("Preview sign-in", runPreview);
   previewButton.id = "sso-preview-permissions";
-  previewSection.append(
-    previewHeading,
-    field("Preview for user", previewUser),
-    field("Groups / roles to test", previewRoles),
+  previewButton.classList.add("sso-preview-button");
+  const inputs = el("div", "sso-preview-inputs");
+  inputs.append(
+    field("User", previewUser),
+    field("Groups", previewRoles),
     membership,
     previewButton,
+  );
+  previewSection.append(
+    previewHeading,
+    previewIntro,
+    inputs,
     previewStatus,
     result,
   );
 
+  // Server sources read "Group: a, b" and "Keep Jellyfin setting"; show plain labels.
+  function from(source) {
+    if (!source || source === "Keep Jellyfin setting") return "Not managed";
+    return source
+      .replace(/^Group: /, "")
+      .replace(/, Group: /, " + ")
+      .replace(/^Everyone, /, "Everyone + ");
+  }
+  const onOff = (value) => (value == null ? "—" : value ? "On" : "Off");
+
+  function chip(text, variant = "") {
+    return el("span", `sso-chip ${variant}`.trim(), text);
+  }
+
+  function renderResult(response, roles) {
+    const who = previewUser.value ? userName(previewUser.value) : "a new user";
+    const card = el("div", "sso-preview-result");
+    const headline = el("div", "sso-preview-headline");
+    const icon = el("span", "material-icons");
+    icon.setAttribute("aria-hidden", "true");
+    const title = el("h4");
+    const subtitle = el("p", "sso-muted");
+    headline.append(icon, el("div"));
+    headline.lastChild.append(title, subtitle);
+    card.append(headline);
+    if (!response.Admitted) {
+      card.classList.add("is-blocked");
+      icon.textContent = "block";
+      title.textContent = `Sign-in blocked for ${who}`;
+      subtitle.textContent = response.BlockedReason;
+      return card;
+    }
+    const matched = draft.GroupPermissions.filter((g) =>
+      roles.includes(g.Role),
+    ).map((g) => g.Role);
+    const override = draft.UserPermissions.some(
+      (r) => normalizeId(r.UserId) === normalizeId(previewUser.value),
+    );
+    if (!response.Synchronize) {
+      icon.textContent = "lock";
+      title.textContent = `${who[0].toUpperCase() + who.slice(1)} keeps their Jellyfin permissions`;
+      subtitle.textContent = override
+        ? "This user is exempt from permission management."
+        : "Manage Jellyfin permissions is off for this provider.";
+      return card;
+    }
+    icon.textContent = "how_to_reg";
+    title.textContent = previewUser.value
+      ? `When ${who} signs in`
+      : "When a new user with these groups signs in";
+    subtitle.textContent =
+      [
+        matched.length
+          ? `Matching groups: ${matched.join(", ")}`
+          : "No groups match",
+        override ? "User override applies" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ") + ".";
+
+    // Library access has its own section below.
+    const managed = response.Permissions.filter(
+      (p) => p.Managed && p.Key !== "EnableAllFolders",
+    );
+    const existing = Boolean(previewUser.value);
+    const changes = existing
+      ? managed.filter((p) => p.Change === "On" || p.Change === "Off")
+      : managed;
+    card.append(
+      el("h5", "sso-preview-label", existing ? "Changes" : "Permissions set"),
+    );
+    if (!changes.length)
+      card.append(
+        el(
+          "p",
+          "sso-muted",
+          existing
+            ? "No permission changes. Everything SSO manages already matches."
+            : "SSO doesn't manage any permissions for this user.",
+        ),
+      );
+    else {
+      const listing = el("ul", "sso-change-list");
+      for (const p of changes) {
+        const item = el("li");
+        item.dataset.permission = p.Key;
+        const value = el("span", "sso-change-value");
+        if (existing) {
+          value.append(
+            el("span", "sso-muted", onOff(p.Current)),
+            el("span", "material-icons sso-change-arrow", "arrow_forward"),
+          );
+          value.lastChild.setAttribute("aria-label", "becomes");
+        }
+        value.append(
+          chip(onOff(p.Effective), p.Effective ? "is-on" : "is-off"),
+        );
+        item.append(
+          el("span", "sso-change-name", p.Name),
+          value,
+          el("span", "sso-muted sso-change-source", from(p.Source)),
+        );
+        listing.append(item);
+      }
+      card.append(listing);
+    }
+
+    const library = response.Libraries;
+    card.append(el("h5", "sso-preview-label", "Libraries"));
+    const chips = el("div", "sso-chips");
+    if (library.All) chips.append(chip("All libraries", "is-on"));
+    else {
+      const effective = library.Effective || [];
+      const current = existing && !library.CurrentAll ? library.Current : null;
+      for (const id of effective)
+        chips.append(
+          chip(
+            folderName(id),
+            current && !current.includes(id) ? "is-added" : "",
+          ),
+        );
+      for (const id of current || [])
+        if (!effective.includes(id))
+          chips.append(chip(folderName(id), "is-removed"));
+      if (existing && library.CurrentAll)
+        chips.append(chip("All libraries", "is-removed"));
+      if (!chips.childElementCount)
+        chips.append(chip("No libraries", "is-off"));
+    }
+    card.append(
+      chips,
+      el("p", "sso-muted sso-preview-source", `From ${from(library.Source)}`),
+    );
+
+    const table = el("table", "sso-permission-table");
+    const head = el("thead");
+    const headRow = el("tr");
+    for (const text of ["Permission", "Now", "After sign-in", "From"]) {
+      const th = el("th", "", text);
+      th.scope = "col";
+      headRow.append(th);
+    }
+    head.append(headRow);
+    const body = el("tbody");
+    for (const p of response.Permissions) {
+      const row = el("tr");
+      row.dataset.permission = p.Key;
+      row.classList.toggle(
+        "is-changed",
+        existing && (p.Change === "On" || p.Change === "Off"),
+      );
+      row.classList.toggle("is-unmanaged", !p.Managed);
+      const th = el("th", "", p.Name);
+      th.scope = "row";
+      row.append(
+        th,
+        el("td", "", onOff(p.Current)),
+        el("td", "", onOff(p.Effective)),
+        el("td", "", from(p.Source)),
+      );
+      body.append(row);
+    }
+    table.append(head, body);
+    const scroll = el("div", "sso-table-scroll");
+    scroll.append(table);
+    const all = el("details", "sso-preview-all");
+    all.append(
+      el("summary", "", `All permissions (${response.Permissions.length})`),
+      scroll,
+    );
+    card.append(all);
+    return card;
+  }
+
   async function runPreview() {
     const ticket = ++revision;
     result.replaceChildren();
-    previewStatus.textContent = "Calculating permissions…";
+    previewStatus.hidden = false;
+    previewStatus.classList.remove("sso-status-error");
+    previewStatus.textContent = "Calculating…";
     previewButton.disabled = true;
     try {
+      const roles = lines(previewRoles.value);
       const response = await options.preview({
         Configuration: options.readProvider(),
         UserId: previewUser.value || null,
-        Roles: lines(previewRoles.value),
+        Roles: roles,
       });
       if (ticket !== revision) return;
-      previewStatus.textContent = !response.Admitted
-        ? `Sign-in blocked: ${response.BlockedReason}. No permissions would change.`
-        : !response.Synchronize
-          ? "SSO will leave this user's Jellyfin permissions unchanged."
-          : "Preview only. Save the provider to apply this policy at the next sign-in.";
-      const table = el("table", "sso-permission-table");
-      const caption = el(
-        "caption",
-        "",
-        "All Jellyfin permission flags and the source of each result",
-      );
-      const head = el("thead");
-      const headRow = el("tr");
-      for (const title of [
-        "Permission",
-        "Current",
-        "After SSO",
-        "Change",
-        "Source",
-      ]) {
-        const th = el("th", "", title);
-        th.scope = "col";
-        headRow.append(th);
-      }
-      head.append(headRow);
-      table.append(caption, head);
-      const body = el("tbody");
-      const state = (value) =>
-        value == null ? "Jellyfin default" : value ? "On" : "Off";
-      for (const permission of response.Permissions) {
-        const row = el("tr");
-        row.dataset.permission = permission.Key;
-        const heading = el("th", "", permission.Name);
-        heading.scope = "row";
-        row.append(
-          heading,
-          el("td", "", state(permission.Current)),
-          el("td", "", state(permission.Effective)),
-          el(
-            "td",
-            "",
-            permission.Change === "Unmanaged" ? "Keep" : permission.Change,
-          ),
-          el("td", "", permission.Source),
-        );
-        body.append(row);
-      }
-      table.append(body);
-      const scroll = el("div", "sso-table-scroll");
-      scroll.tabIndex = 0;
-      scroll.setAttribute("role", "region");
-      scroll.setAttribute("aria-label", "Permission preview table");
-      scroll.append(table);
-      const library = response.Libraries;
-      const names = (ids) =>
-        ids == null
-          ? "Jellyfin defaults"
-          : ids.length
-            ? ids
-                .map(
-                  (id) =>
-                    folders.find((f) => f.Id === id)?.Name ||
-                    `Unavailable library (${id})`,
-                )
-                .join(", ")
-            : "No selected libraries";
-      result.append(
-        scroll,
-        el("h4", "", "Library access"),
-        el(
-          "p",
-          "",
-          library.All
-            ? "All libraries, including libraries added later."
-            : names(library.Effective),
-        ),
-        el("p", "fieldDescription", library.Source),
-        el("p", "fieldDescription", response.Note),
-      );
+      previewStatus.hidden = true;
+      result.append(renderResult(response, roles));
     } catch (error) {
-      if (ticket === revision)
+      if (ticket === revision) {
+        previewStatus.classList.add("sso-status-error");
         previewStatus.textContent =
           error?.message ||
           "Unable to preview permissions. Check the rules and try again.";
+      }
     } finally {
       previewButton.disabled = false;
     }
   }
-  root.replaceChildren(note, scopeField, error, editor, previewSection);
+  root.replaceChildren(error, editor, previewSection);
   return {
     load(provider) {
       draft = structuredClone({
@@ -606,13 +817,10 @@ export function createPermissionEditor(root, options) {
           value,
         ]),
       );
-      scope = "defaults";
-      scopeSelect.value = scope;
       editing = null;
       previewUser.value = "";
       previewRoles.value = "";
-      membership.textContent =
-        "Enter groups to test. This does not query or change membership at your identity provider.";
+      membership.textContent = defaultMembership;
       renderEditor();
       invalidate();
     },

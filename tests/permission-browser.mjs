@@ -22,7 +22,6 @@ export async function permissionChecks(page, state) {
     .locator("label")
     .filter({ has: page.locator("#EnableAuthorization") })
     .click();
-  await page.locator("#sso-permission-scope").selectOption("groups");
   // "family" already exists: the dashboard fixture's AdminRoles became that group.
   await page.locator("#sso-permission-new-group").fill("downloaders");
   await page.getByRole("button", { name: "Add group", exact: true }).click();
@@ -38,7 +37,7 @@ export async function permissionChecks(page, state) {
     await page.locator("#sso-preview-permissions").click();
     const result = await response;
     assert.equal(result.status(), 200, await result.text());
-    await panel.locator(".sso-permission-table").waitFor();
+    await panel.locator(".sso-preview-result").waitFor();
     return result.json();
   };
   let result = await preview();
@@ -47,6 +46,13 @@ export async function permissionChecks(page, state) {
   assert.equal(download().Effective, true);
   assert.equal(download().Source, "Group: downloaders");
   assert.equal(result.Permissions.length, 24);
+  assert.equal(
+    await panel
+      .locator('.sso-change-list [data-permission="EnableContentDownloading"]')
+      .count(),
+    1,
+    "preview lists the granted permission",
+  );
   // Groups only add: without the downloaders group the Everyone baseline applies.
   // "family" is the admitted sign-in role set by the dashboard checks.
   await page.locator("#sso-preview-roles").fill("family\ntv");
@@ -68,7 +74,6 @@ export async function permissionChecks(page, state) {
   assert.deepEqual(result.Libraries.Effective, ["missing-library"]);
   await libraryMode.selectOption("Inherit");
   // Actual user overrides take precedence, and preview does not mutate their policy.
-  await page.locator("#sso-permission-scope").selectOption("users");
   const target = await page
     .locator("#sso-permission-new-user option")
     .evaluateAll(
@@ -113,7 +118,9 @@ export async function permissionChecks(page, state) {
     .filter({ hasText: "Saved “Household”" })
     .waitFor();
   // Reopening after a server save retains the new rule structures and their baseline.
-  await page.locator("#sso-permission-scope").selectOption("defaults");
+  await page
+    .getByRole("button", { name: "Edit Everyone", exact: true })
+    .click();
   assert.equal(
     await matrix
       .locator('[data-permission="EnableContentDownloading"]')
