@@ -200,7 +200,8 @@ public static class PermissionPolicy
 
     public static ResolvedPermissions Resolve(ProviderConfig config, string[] roles, Guid? userId)
     {
-        IdentityPolicy.Admit(config, roles);
+        var roleSet = roles.ToHashSet(StringComparer.Ordinal);
+        IdentityPolicy.Admit(config, roleSet);
         var values = new Dictionary<PermissionKind, bool>();
         var sources = new Dictionary<PermissionKind, string>();
         foreach (var entry in config.PermissionDefaults ?? new())
@@ -211,7 +212,7 @@ public static class PermissionPolicy
         }
 
         string GroupSource(IEnumerable<string> groups) => "Group: " + string.Join(", ", groups);
-        var matching = config.GroupPermissions.Where(r => roles.Contains(r.Role, StringComparer.Ordinal)).ToArray();
+        var matching = config.GroupPermissions.Where(r => roleSet.Contains(r.Role)).ToArray();
         foreach (var grant in matching.SelectMany(r => r.Permissions.Where(p => p.Value).Select(p => (r.Role, p.Key))).GroupBy(p => p.Key))
         {
             var kind = Enum.Parse<PermissionKind>(grant.Key);

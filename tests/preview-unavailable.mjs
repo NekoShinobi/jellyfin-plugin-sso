@@ -3,18 +3,19 @@ import assert from "node:assert/strict";
 export async function unavailableUserPreviewChecks(page, moduleUrl) {
   const result = await page.evaluate(async (url) => {
     const { createPermissionEditor } = await import(url);
+    const {
+      element: el,
+      iconButton,
+      checkbox,
+    } = await import(url.replace("SSO-Auth.permissions.js", "SSO-Auth.js"));
     const root = document.createElement("div");
     const known = "11111111-1111-1111-1111-111111111111";
     const missing = "22222222-2222-2222-2222-222222222222";
     const requests = [];
-    const el = (tag, className = "", text) => {
-      const node = document.createElement(tag);
-      node.className = className;
-      if (text !== undefined) node.textContent = text;
-      return node;
-    };
     const editor = createPermissionEditor(root, {
       element: el,
+      iconButton,
+      checkbox,
       definitions: [],
       users: [{ Id: known, Name: "Existing user" }],
       folders: [],

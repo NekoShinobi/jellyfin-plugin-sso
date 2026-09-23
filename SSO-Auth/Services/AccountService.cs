@@ -50,8 +50,7 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
                 throw new SsoException("A linking proof cannot issue a login session.", 403);
             }
 
-            providers.EnsureUnchanged(transaction);
-            var config = providers.Get(transaction.Mode, transaction.Provider);
+            var config = providers.GetUnchanged(transaction);
             IdentityPolicy.Admit(config, completion.Identity.Roles);
             ValidateFallback(config.DefaultProvider);
             var hasSubjectLink = config.SubjectLinks.TryGetValue(completion.Identity.Key, out var userId);
@@ -178,8 +177,7 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
                 throw new SsoException("The linking target does not match the initiating account.", 403);
             }
 
-            providers.EnsureUnchanged(transaction);
-            IdentityPolicy.Admit(providers.Get(transaction.Mode, transaction.Provider), completion.Identity.Roles);
+            IdentityPolicy.Admit(providers.GetUnchanged(transaction), completion.Identity.Roles);
             providers.Edit(c =>
             {
                 var provider = ProviderStore.Find(c, transaction.Mode, transaction.Provider);

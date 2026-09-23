@@ -109,11 +109,16 @@ public sealed class ProviderStore(Func<PluginConfiguration> read, Action<PluginC
 
     public static ProviderConfig Find(PluginConfiguration config, string mode, string name) => mode == "OID" ? config.OidConfigs[name] : config.SamlConfigs[name];
 
-    public void EnsureUnchanged(LoginTransaction transaction)
+    public void EnsureUnchanged(LoginTransaction transaction) => GetUnchanged(transaction);
+
+    internal ProviderConfig GetUnchanged(LoginTransaction transaction)
     {
-        if (ConfigurationMigration.Fingerprint(Get(transaction.Mode, transaction.Provider)) != transaction.SettingsHash)
+        var config = Get(transaction.Mode, transaction.Provider);
+        if (ConfigurationMigration.Fingerprint(config) != transaction.SettingsHash)
         {
             throw new SsoException("Provider settings changed during sign-in. Start again.");
         }
+
+        return config;
     }
 }

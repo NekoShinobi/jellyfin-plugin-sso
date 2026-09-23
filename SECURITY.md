@@ -10,6 +10,9 @@ Include the affected commit/version, reproduction steps, impact, and any
 proposed fix. Verify automated findings and remove real credentials, tokens,
 and personal data from examples. Coordinate disclosure with the maintainers.
 
-This fork targets Jellyfin 12.0+ and is undergoing an authentication rewrite.
-Compilation and release automation do not imply that outstanding security or
-migration findings have been resolved.
+This fork targets Jellyfin 12.0+ on .NET 10. The 5.x authentication rewrite is
+implemented; current account-matching and upgrade behavior is documented in the
+[account guide](docs/accounts-and-clients.md) and [migration guide](docs/migration.md).
+Report issues against the plugin and server versions you tested. Historical audit
+results and passing automation do not establish that every deployment or finding
+is covered.

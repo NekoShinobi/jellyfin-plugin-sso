@@ -46,6 +46,23 @@ public class PermissionTests
     }
 
     [Fact]
+    public void AdmissionAndGroupMatchingStayOrdinalAndDuplicateClaimsDoNotDuplicateGrants()
+    {
+        var config = Config();
+        config.Roles = ["family"];
+        config.GroupPermissions = [
+            new() { Role = "family", Permissions = new() { ["EnableContentDownloading"] = true } },
+            new() { Role = "Family", Permissions = new() { ["IsAdministrator"] = true } },
+        ];
+        ConfigurationMigration.NormalizeProvider(config);
+        Assert.Equal(403, Assert.Throws<SsoException>(() => PermissionPolicy.Resolve(config, ["Family"], null)).Status);
+        var result = PermissionPolicy.Resolve(config, ["family", "family"], null);
+        Assert.True(result.Values[PermissionKind.EnableContentDownloading]);
+        Assert.False(result.Values[PermissionKind.IsAdministrator]);
+        Assert.Equal("Group: family", result.Sources[PermissionKind.EnableContentDownloading]);
+    }
+
+    [Fact]
     public void GroupRulesCannotTurnPermissionsOff()
     {
         var config = Config();

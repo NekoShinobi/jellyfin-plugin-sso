@@ -1,6 +1,8 @@
 export function createPermissionEditor(root, options) {
   const {
     element: el,
+    iconButton,
+    checkbox,
     definitions,
     users,
     folders,
@@ -33,24 +35,10 @@ export function createPermissionEditor(root, options) {
         .filter(Boolean),
     ),
   ];
-  function button(text, action, quiet = false) {
-    const node = el(
-      "button",
-      `sso-button${quiet ? " sso-button-quiet" : ""}`,
-      text,
-    );
+  function button(text, action) {
+    const node = el("button", "sso-button", text);
     node.type = "button";
     node.addEventListener("click", action);
-    return node;
-  }
-  function iconButton(icon, label, action) {
-    const node = button(label, action, true);
-    node.classList.add("sso-icon-button");
-    node.title = label;
-    node.setAttribute("aria-label", label);
-    const glyph = el("span", "material-icons", icon);
-    glyph.setAttribute("aria-hidden", "true");
-    node.replaceChildren(glyph);
     return node;
   }
   function field(labelText, input) {
@@ -129,24 +117,6 @@ export function createPermissionEditor(root, options) {
     renderEditor();
   });
 
-  function grantCheckbox(labelText, checked) {
-    const label = el("label", "emby-checkbox-label sso-permission-grant");
-    const box = el("input", "emby-checkbox");
-    box.classList.remove("emby-input");
-    box.type = "checkbox";
-    box.checked = checked;
-    const outline = el("span", "checkboxOutline");
-    const check = el(
-      "span",
-      "material-icons checkboxIcon checkboxIcon-checked",
-      "check",
-    );
-    check.setAttribute("aria-hidden", "true");
-    outline.append(check);
-    label.append(box, el("span", "checkboxLabel", labelText), outline);
-    return { label, box };
-  }
-
   // kind is "defaults" (Keep/On/Off), "group" (grant checkboxes) or "user" (Inherit/On/Off).
   function matrix(container, values, kind) {
     const isDefault = kind === "defaults";
@@ -167,9 +137,10 @@ export function createPermissionEditor(root, options) {
       )) {
         const searchText = (definition.Name + " " + category).toLowerCase();
         if (kind === "group") {
-          const { label, box } = grantCheckbox(
+          const { label, box } = checkbox(
             definition.Name,
             values[definition.Key] === true,
+            "sso-permission-grant",
           );
           box.dataset.permission = definition.Key;
           label.dataset.search = searchText;
@@ -238,32 +209,48 @@ export function createPermissionEditor(root, options) {
     container.append(grid);
   }
 
-  function libraries(container, rule, isUser) {
+  function libraries(container, rule, kind) {
+    const everyone = kind === "defaults";
+    const isUser = kind === "user";
     const mode = select(
-      isUser
-        ? [
-            ["Inherit", "Inherit library access"],
-            ["All", "All libraries"],
-            ["Selected", "Selected libraries only"],
-          ]
-        : [
-            ["Inherit", "No additional libraries"],
-            ["All", "All libraries"],
-            ["Selected", "Add selected libraries"],
-          ],
-      rule.LibraryMode || "Inherit",
+      [
+        ...(everyone
+          ? []
+          : [
+              [
+                "Inherit",
+                isUser ? "Inherit library access" : "No additional libraries",
+              ],
+            ]),
+        ["All", "All libraries"],
+        [
+          "Selected",
+          everyone || isUser
+            ? "Selected libraries only"
+            : "Add selected libraries",
+        ],
+      ],
+      everyone
+        ? rule.EnableAllFolders
+          ? "All"
+          : "Selected"
+        : rule.LibraryMode || "Inherit",
     );
-    mode.dataset.libraryMode = "true";
+    if (everyone) mode.id = "sso-everyone-libraries";
+    else mode.dataset.libraryMode = "true";
     container.append(field("Library access", mode));
     const choices = el("div", "sso-folder-list");
-    folderChoices(choices, rule.Folders || []);
+    if (everyone) choices.id = "sso-everyone-folders";
+    const folderKey = everyone ? "EnabledFolders" : "Folders";
+    folderChoices(choices, rule[folderKey] || []);
     choices.hidden = mode.value !== "Selected";
     choices.addEventListener("change", () => {
-      rule.Folders = chosenFolders(choices);
+      rule[folderKey] = chosenFolders(choices);
       changed();
     });
     mode.addEventListener("change", () => {
-      rule.LibraryMode = mode.value;
+      if (everyone) rule.EnableAllFolders = mode.value === "All";
+      else rule.LibraryMode = mode.value;
       choices.hidden = mode.value !== "Selected";
       changed();
     });
@@ -272,42 +259,11 @@ export function createPermissionEditor(root, options) {
       el(
         "p",
         "fieldDescription",
-        isUser
-          ? "Replaces the libraries from Everyone and groups. Selecting no libraries grants none."
-          : "Adds to the libraries for everyone and from other matching groups. All libraries wins over any selection.",
-      ),
-    );
-  }
-
-  function everyoneLibraries(container) {
-    const mode = select(
-      [
-        ["All", "All libraries"],
-        ["Selected", "Selected libraries only"],
-      ],
-      draft.EnableAllFolders ? "All" : "Selected",
-    );
-    mode.id = "sso-everyone-libraries";
-    container.append(field("Library access", mode));
-    const choices = el("div", "sso-folder-list");
-    choices.id = "sso-everyone-folders";
-    folderChoices(choices, draft.EnabledFolders);
-    choices.hidden = draft.EnableAllFolders;
-    choices.addEventListener("change", () => {
-      draft.EnabledFolders = chosenFolders(choices);
-      changed();
-    });
-    mode.addEventListener("change", () => {
-      draft.EnableAllFolders = mode.value === "All";
-      choices.hidden = draft.EnableAllFolders;
-      changed();
-    });
-    container.append(
-      choices,
-      el(
-        "p",
-        "fieldDescription",
-        "All libraries includes libraries added later. Groups can add libraries to a selection.",
+        everyone
+          ? "All libraries includes libraries added later. Groups can add libraries to a selection."
+          : isUser
+            ? "Replaces the libraries from Everyone and groups. Selecting no libraries grants none."
+            : "Adds to the libraries for everyone and from other matching groups. All libraries wins over any selection.",
       ),
     );
   }
@@ -324,7 +280,7 @@ export function createPermissionEditor(root, options) {
           "Applies to every user of this provider. Keep a permission with Jellyfin, or set it On or Off. A permission that a group or user rule uses stays managed, Off unless you choose On.",
         ),
       );
-      everyoneLibraries(editor);
+      libraries(editor, draft, "defaults");
       matrix(editor, draft.PermissionDefaults, "defaults");
       return;
     }
@@ -446,7 +402,7 @@ export function createPermissionEditor(root, options) {
         details.append(field("Permission management", preserve));
         ruleFields.hidden = Boolean(rule.PreservePermissions);
       }
-      libraries(ruleFields, rule, isUser);
+      libraries(ruleFields, rule, isUser ? "user" : "group");
       matrix(ruleFields, rule.Permissions, isUser ? "user" : "group");
       const targetUser = isUser
         ? users.find((u) => normalizeId(u.Id) === normalizeId(rule.UserId))

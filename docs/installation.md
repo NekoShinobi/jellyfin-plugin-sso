@@ -39,7 +39,7 @@ and restart. Extract the entire archive, including `SSO-Auth.dll`, its bundled
 protocol/support assemblies, and `meta.json`; copying only the plugin DLL omits
 required dependencies. The package allowlist is maintained in `scripts/release.py`.
 Do not leave another SSO version installed in a second directory; follow
-[the replacement procedure](migration.md#replacing-installed-plugin-files).
+[troubleshooting after an upgrade](migration.md#if-something-goes-wrong).
 
 For a local development package, follow [development](development.md).
 

@@ -45,6 +45,35 @@ public class AccountTests
         Assert.True(recovered.HasPermission(PermissionKind.EnableContentDeletion));
     }
 
+    [Theory]
+    [InlineData("OID")]
+    [InlineData("SAML")]
+    public async Task ProviderChangesDuringAccountUpdateStillPreventSessionIssuance(string mode)
+    {
+        var f = new Fixture();
+        f.AddUser(f.Identity.DisplayName);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Users.Setup(u => u.UpdateUserAsync(It.IsAny<User>())).Returns(async () =>
+        {
+            entered.SetResult();
+            await release.Task;
+        });
+        var login = f.Service.Login(f.Completion(mode: mode), f.Client, "127.0.0.1");
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            f.Store.Edit(c => ProviderStore.Find(c, mode, "test").Roles = ["changed"]);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+        await Assert.ThrowsAsync<SsoException>(() => login);
+        Assert.Empty(f.Store.Get(mode, "test").SubjectLinks);
+        f.Sessions.Verify(s => s.AuthenticateDirect(It.IsAny<AuthenticationRequest>()), Times.Never);
+    }
+
     [Fact]
     public async Task AnExplicitlyLinkedSecondProviderUsesItsOwnAdmissionPolicy()
     {

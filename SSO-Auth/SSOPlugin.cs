@@ -77,27 +77,24 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
         {
             var normalized = ConfigurationMigration.Normalize((PluginConfiguration)configuration);
             // Dashboard snapshots may predate a completed link. Link mutations use PersistConfiguration.
-            foreach (var entry in normalized.OidConfigs)
-            {
-                if (Configuration.OidConfigs.TryGetValue(entry.Key, out var current))
-                {
-                    entry.Value.SubjectLinks = current.SubjectLinks;
-                    entry.Value.CanonicalLinks = current.CanonicalLinks;
-                    entry.Value.UserRoleSnapshots = current.UserRoleSnapshots;
-                }
-            }
-
-            foreach (var entry in normalized.SamlConfigs)
-            {
-                if (Configuration.SamlConfigs.TryGetValue(entry.Key, out var current))
-                {
-                    entry.Value.SubjectLinks = current.SubjectLinks;
-                    entry.Value.CanonicalLinks = current.CanonicalLinks;
-                    entry.Value.UserRoleSnapshots = current.UserRoleSnapshots;
-                }
-            }
+            PreserveAccountState(normalized.OidConfigs, Configuration.OidConfigs);
+            PreserveAccountState(normalized.SamlConfigs, Configuration.SamlConfigs);
 
             PersistConfiguration(normalized);
+        }
+    }
+
+    private static void PreserveAccountState<T>(IDictionary<string, T> updated, IDictionary<string, T> saved)
+        where T : ProviderConfig
+    {
+        foreach (var entry in updated)
+        {
+            if (saved.TryGetValue(entry.Key, out var current))
+            {
+                entry.Value.SubjectLinks = current.SubjectLinks;
+                entry.Value.CanonicalLinks = current.CanonicalLinks;
+                entry.Value.UserRoleSnapshots = current.UserRoleSnapshots;
+            }
         }
     }
 

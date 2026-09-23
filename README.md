@@ -42,12 +42,28 @@ It targets **Jellyfin 12.0+** (the release originally called 10.12) and .NET 10.
 Installation, browser login/linking, and migration are tested on Jellyfin 12.0
 and 12.1. Read the migration guide before upgrading an existing installation.
 
-## Get started
+## Install
 
-Read the [installation guide](docs/installation.md), configure an
-[identity provider](docs/providers/index.md), then follow the
-[setup guide](docs/getting-started.md). Existing users should read the
-[migration guide](docs/migration.md) first.
+Requires Jellyfin 12.0 or later.
+
+1. In Jellyfin, open **Dashboard → Plugins → Repositories** and add this repository:
+
+   ```text
+   https://raw.githubusercontent.com/NekoShinobi/jellyfin-plugin-sso/main/manifest.json
+   ```
+
+2. Open the **Catalog**, install **SSO Authentication**, and restart Jellyfin.
+3. Open **Dashboard → SSO** to add your identity provider. See the
+   [provider guides](docs/providers/index.md) and the
+   [setup guide](docs/getting-started.md).
+
+> [!IMPORTANT]
+> Upgrading from the upstream plugin? Remove its old repository
+> (`https://raw.githubusercontent.com/9p4/jellyfin-plugin-sso/manifest-release/manifest.json`)
+> so Jellyfin only sees one source for this plugin. Your settings, account links,
+> and permissions migrate automatically; see the [migration guide](docs/migration.md).
+
+For manual installation, see the [installation guide](docs/installation.md).
 
 ## Documentation
 

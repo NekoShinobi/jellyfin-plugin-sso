@@ -40,6 +40,29 @@ public class MigrationTests
         }
     }
 
+    [Theory]
+    [InlineData("OID")]
+    [InlineData("SAML")]
+    public void ValidatedSnapshotIncludesLatestLinksButIsDetachedAndStillRejectsChangedSettings(string mode)
+    {
+        var config = new PluginConfiguration();
+        config.OidConfigs["test"] = new() { Enabled = true };
+        config.SamlConfigs["test"] = new() { Enabled = true };
+        var store = new ProviderStore(() => config, c => config = c);
+        var original = store.Get(mode, "test");
+        var transaction = new LoginTransaction(mode, "test", "https://jf/callback", "browser", null, ConfigurationMigration.Fingerprint(original), original);
+        var id = Guid.NewGuid();
+        store.Edit(c => ProviderStore.Find(c, mode, "test").SubjectLinks["new-subject"] = id);
+        var current = store.GetUnchanged(transaction);
+        Assert.Equal(id, current.SubjectLinks["new-subject"]);
+        current.SubjectLinks.Clear();
+        Assert.Equal(id, store.Get(mode, "test").SubjectLinks["new-subject"]);
+        store.Edit(c => ProviderStore.Find(c, mode, "test").Roles = ["changed"]);
+        Assert.Throws<SsoException>(() => store.GetUnchanged(transaction));
+        store.Edit(c => { var provider = ProviderStore.Find(c, mode, "test"); provider.Roles = []; provider.Enabled = false; });
+        Assert.Equal(404, Assert.Throws<SsoException>(() => store.GetUnchanged(transaction)).Status);
+    }
+
     [Fact]
     public void FailedConfigurationEditDoesNotOverwriteOtherProviders()
     {

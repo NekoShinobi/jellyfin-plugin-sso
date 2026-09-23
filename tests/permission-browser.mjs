@@ -57,6 +57,16 @@ export async function permissionChecks(page, state) {
     result.Permissions.find((p) => p.Key === "IsDisabled").Managed,
     false,
   );
+  // Group library selection adds to Everyone; switching modes must retain the baseline.
+  const libraryMode = matrix.locator('[data-library-mode="true"]');
+  await libraryMode.selectOption("All");
+  result = await preview();
+  assert.equal(result.Libraries.All, true);
+  await libraryMode.selectOption("Selected");
+  result = await preview();
+  assert.equal(result.Libraries.All, false);
+  assert.deepEqual(result.Libraries.Effective, ["missing-library"]);
+  await libraryMode.selectOption("Inherit");
   // Actual user overrides take precedence, and preview does not mutate their policy.
   await page.locator("#sso-permission-scope").selectOption("users");
   const target = await page
@@ -81,6 +91,17 @@ export async function permissionChecks(page, state) {
   result = await preview();
   assert.equal(download().Effective, false);
   assert.equal(download().Source, "User override");
+  // A user's empty selection replaces inherited libraries, then Inherit restores them.
+  await libraryMode.selectOption("Selected");
+  result = await preview();
+  assert.equal(result.Libraries.All, false);
+  assert.deepEqual(result.Libraries.Effective, []);
+  await libraryMode.selectOption("All");
+  result = await preview();
+  assert.equal(result.Libraries.All, true);
+  await libraryMode.selectOption("Inherit");
+  result = await preview();
+  assert.deepEqual(result.Libraries.Effective, ["missing-library"]);
   await page.locator("#sso-permission-preserve-user").selectOption("true");
   result = await preview();
   assert.equal(result.Synchronize, false);
@@ -99,10 +120,18 @@ export async function permissionChecks(page, state) {
       .inputValue(),
     "false",
   );
+  await page.locator("#sso-everyone-libraries").selectOption("All");
+  assert.equal(await page.locator("#sso-everyone-folders").isVisible(), false);
+  await page.locator("#sso-everyone-libraries").selectOption("Selected");
+  assert.equal(
+    await page.locator("#sso-everyone-folders input:checked").count(),
+    1,
+  );
   await page.locator("#sso-preview-user").selectOption(target);
   await page.locator("#sso-preview-roles").fill("family\ndownloaders\ntv");
   result = await preview();
   assert.equal(download().Effective, false);
+  assert.deepEqual(result.Libraries.Effective, ["missing-library"]);
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(
     await page.evaluate(

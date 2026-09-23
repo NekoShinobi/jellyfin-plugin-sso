@@ -1,6 +1,6 @@
 const pluginUniqueId = "505ce9d1-d916-42fa-86ca-673ef241d7df";
 
-function element(tag, className, text) {
+export function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (tag === "button") {
@@ -14,7 +14,7 @@ function element(tag, className, text) {
   return node;
 }
 
-function iconButton(icon, label, extraClass = "") {
+export function iconButton(icon, label, action, extraClass = "") {
   const button = element(
     "button",
     "sso-button sso-button-quiet sso-icon-button " + extraClass,
@@ -25,7 +25,26 @@ function iconButton(icon, label, extraClass = "") {
   const glyph = element("span", "material-icons", icon);
   glyph.setAttribute("aria-hidden", "true");
   button.append(glyph);
+  if (action) button.addEventListener("click", action);
   return button;
+}
+
+export function checkbox(labelText, checked, className = "") {
+  const label = element("label", "emby-checkbox-label " + className);
+  const box = element("input", "emby-checkbox");
+  box.classList.remove("emby-input");
+  box.type = "checkbox";
+  box.checked = checked;
+  const outline = element("span", "checkboxOutline");
+  const check = element(
+    "span",
+    "material-icons checkboxIcon checkboxIcon-checked",
+    "check",
+  );
+  check.setAttribute("aria-hidden", "true");
+  outline.append(check);
+  label.append(box, element("span", "checkboxLabel", labelText), outline);
+  return { label, box };
 }
 
 export default function (view) {
@@ -151,23 +170,13 @@ export default function (view) {
         ),
       );
     for (const folder of choices) {
-      const label = element("label", "sso-folder-choice emby-checkbox-label");
-      const input = element("input", "folder-checkbox");
-      input.type = "checkbox";
-      input.classList.remove("emby-input");
-      input.classList.add("emby-checkbox");
-      input.dataset.id = folder.Id;
-      input.checked = values.includes(folder.Id);
-      label.append(input, element("span", "checkboxLabel", folder.Name));
-      const outline = element("span", "checkboxOutline");
-      const check = element(
-        "span",
-        "material-icons checkboxIcon checkboxIcon-checked",
-        "check",
+      const { label, box } = checkbox(
+        folder.Name,
+        values.includes(folder.Id),
+        "sso-folder-choice",
       );
-      check.setAttribute("aria-hidden", "true");
-      outline.append(check);
-      label.append(outline);
+      box.classList.add("folder-checkbox");
+      box.dataset.id = folder.Id;
       container.append(label);
     }
   }
@@ -246,7 +255,12 @@ export default function (view) {
           $("#sso-tab-connection").focus();
         }
       });
-      const remove = iconButton("delete", "Delete " + name, "sso-danger-text");
+      const remove = iconButton(
+        "delete",
+        "Delete " + name,
+        undefined,
+        "sso-danger-text",
+      );
       remove.addEventListener("click", () => {
         if (busy) return;
         pendingDelete = name;
@@ -514,6 +528,8 @@ export default function (view) {
       $("#sso-permission-editor"),
       {
         element,
+        iconButton,
+        checkbox,
         definitions,
         users,
         folders,
