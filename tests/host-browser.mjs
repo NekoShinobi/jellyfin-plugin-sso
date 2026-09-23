@@ -14,29 +14,30 @@ let base = state.base;
 let proxy;
 {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"; // Synthetic self-signed proxy, confined to this test process.
+  const forward = (req, callback) =>
+    httpRequest(
+      new URL(req.url, new URL(state.base).origin),
+      {
+        method: req.method,
+        headers: {
+          ...req.headers,
+          "x-forwarded-proto": "https",
+          "x-forwarded-host": req.headers.host,
+          "x-forwarded-for": "203.0.113.44",
+        },
+      },
+      callback,
+    );
   proxy = createHttpsServer(
     {
       key: await readFile("/test/proxy.key"),
       cert: await readFile("/test/proxy.crt"),
     },
     (req, res) => {
-      const target = new URL(req.url, new URL(state.base).origin);
-      const upstream = httpRequest(
-        target,
-        {
-          method: req.method,
-          headers: {
-            ...req.headers,
-            "x-forwarded-proto": "https",
-            "x-forwarded-host": req.headers.host,
-            "x-forwarded-for": "203.0.113.44",
-          },
-        },
-        (response) => {
-          res.writeHead(response.statusCode, response.headers);
-          response.pipe(res);
-        },
-      );
+      const upstream = forward(req, (response) => {
+        res.writeHead(response.statusCode, response.headers);
+        response.pipe(res);
+      });
       upstream.on("error", () => {
         res.writeHead(502);
         res.end();
@@ -44,6 +45,30 @@ let proxy;
       req.pipe(upstream);
     },
   );
+  // Forward WebSocket upgrades too: Jellyfin ends a web client's session when its socket closes.
+  proxy.on("upgrade", (req, socket, head) => {
+    const upstream = forward(req);
+    upstream.on("upgrade", (response, upstreamSocket, upstreamHead) => {
+      const lines = [
+        `HTTP/1.1 ${response.statusCode} ${response.statusMessage}`,
+      ];
+      for (let i = 0; i < response.rawHeaders.length; i += 2)
+        lines.push(`${response.rawHeaders[i]}: ${response.rawHeaders[i + 1]}`);
+      socket.write(lines.join("\r\n") + "\r\n\r\n");
+      if (upstreamHead.length) socket.write(upstreamHead);
+      if (head.length) upstreamSocket.write(head);
+      upstreamSocket.pipe(socket).pipe(upstreamSocket);
+      upstreamSocket.on("error", () => socket.destroy());
+    });
+    upstream.on("response", (response) => {
+      socket.end(
+        `HTTP/1.1 ${response.statusCode} ${response.statusMessage}\r\n\r\n`,
+      );
+    });
+    upstream.on("error", () => socket.destroy());
+    socket.on("error", () => upstream.destroy());
+    upstream.end();
+  });
   await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
   if (state.proxy) base = `https://127.0.0.1:${proxy.address().port}/jellyfin`;
 }
@@ -285,14 +310,12 @@ try {
     "other-synthetic",
   );
   await page.goto(base + "/SSOViews/linking");
-  await api("/Sessions/Capabilities/Full?id=" + first.SessionInfo.Id, {
-    SupportsPersistentIdentifier: true,
-  });
   const originalPolicy = (await api("/Users/" + first.User.Id)).Policy;
   const restrictions = [
     [{ MaxActiveSessions: 1 }, 400, "session limit"],
-    [{ IsDisabled: true }, 403, "disabled account"],
+    // Before the disabled account, which drops and reconnects the web client.
     [{ EnableAllDevices: false, EnabledDevices: [] }, 400, "device allowlist"],
+    [{ IsDisabled: true }, 403, "disabled account"],
     [
       {
         AccessSchedules: [{ DayOfWeek: "Everyday", StartHour: 0, EndHour: 0 }],
@@ -303,7 +326,29 @@ try {
   ];
   if (state.proxy)
     restrictions.push([{ EnableRemoteAccess: false }, 403, "remote access"]);
+  // Jellyfin drops a session when its web client disconnects, and the session
+  // limit counts live sessions, so keep a connected web client open.
+  const keeper = await context.newPage();
+  await keeper.goto(base + "/web/");
+  async function liveSession() {
+    for (let attempt = 0; ; attempt++) {
+      const live = (await api("/Sessions")).find(
+        (s) =>
+          s.UserId === first.User.Id && s.Capabilities?.SupportsMediaControl,
+      );
+      if (live) return live;
+      assert.ok(attempt < 40, "web client session did not become active");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  await liveSession();
   for (const [policy, status, label] of restrictions) {
+    // The web client reports non-persistent capabilities when it connects; mark
+    // the device persistent afterwards so the device allowlist applies to it.
+    if (label === "device allowlist")
+      await api("/Sessions/Capabilities/Full?id=" + (await liveSession()).Id, {
+        SupportsPersistentIdentifier: true,
+      });
     await api("/Users/" + first.User.Id + "/Policy", {
       ...originalPolicy,
       ...policy,
@@ -315,6 +360,7 @@ try {
     assert.equal((await denial).status(), status, label);
     await api("/Users/" + first.User.Id + "/Policy", originalPolicy);
   }
+  await keeper.close();
   await login();
   config.EnableAuthorization = false;
   await api("/sso/OID/Add/browser", {
