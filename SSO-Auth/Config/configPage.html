@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>SSO</title>
+    <title>Single sign-on</title>
   </head>
   <body>
     <div
@@ -11,696 +11,711 @@
       data-controller="__plugin/SSO-Auth.js"
     >
       <div data-role="content">
-        <div class="content-primary">
-          <div class="sectionTitleContainer flex align-items-center">
-            <h2 class="sectionTitle">SSO Settings:</h2>
+        <main class="content-primary sso-app">
+          <header class="sso-page-header sectionTitleContainer">
+            <div>
+              <h2 class="sectionTitle">Single sign-on</h2>
+              <p class="sso-intro">
+                Let people sign in with an account they already use. Connect an
+                identity provider, then choose who can access your Jellyfin
+                server.
+              </p>
+            </div>
             <a
-              is="emby-button"
-              class="raised button-alt headerHelpButton"
+              class="sso-help-link"
+              href="https://nekoshinobi.github.io/jellyfin-plugin-sso/"
               target="_blank"
-              href="https://github.com/9p4/jellyfin-plugin-sso"
-              >${Help}</a
+              rel="noopener"
+              >Help</a
+            >
+          </header>
+          <div class="sso-context-bar">
+            <p>Changes apply to new sign-ins. No restart needed.</p>
+            <a id="sso-self-service-link" class="sso-self-service-link"
+              >Account connections</a
             >
           </div>
-          <p>
-            <i>Note:</i>
-            Making changes to this configuration requires a restart of Jellyfin.
-            <br />
-            This plug-in is in early development, not all configuration options
-            have been implented in the UI, for example, SAML provider
-            configuration has not been implemented.
-            <br />
-            See the
-            <a
-              is="emby-linkbutton"
-              href="https://github.com/9p4/jellyfin-plugin-sso"
-              class="button-link"
-              >help page</a
-            >
-            and
-            <a
-              is="emby-linkbutton"
-              href="https://github.com/9p4/jellyfin-plugin-sso/projects/1"
-              class="button-link"
-              >roadmap
-            </a>
-            for more information.
-            <br />
-            To allow users to manage their own SSO accounts, including linking
-            SSO providers, and removing existing links, they need to visit
-            <a
-              is="emby-linkbutton"
-              id="sso-self-service-link"
-              class="button-link"
-              >the self service page </a
-            >. <br />
-            You can use
-            <a
-              is="emby-linkbutton"
-              href="https://jellyfin.org/docs/general/clients/web-config.html#custom-menu-links"
-              class="button-link"
-              >custom menu links
-            </a>
-            to accomplish this.
-          </p>
-
-          <form id="sso-load-config" class="esqConfigurationForm">
+          <div
+            id="sso-status"
+            class="sso-status"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
+          <section
+            class="sso-provider-section"
+            aria-labelledby="sso-providers-title"
+          >
+            <div class="sso-section-heading">
+              <div>
+                <h2 id="sso-providers-title">
+                  Identity providers
+                  <span id="sso-provider-count" class="sso-count"></span>
+                </h2>
+                <p class="sso-muted">
+                  Manage the services people use to sign in.
+                </p>
+              </div>
+              <button
+                id="AddProvider"
+                type="button"
+                class="emby-button raised button-submit sso-button sso-button-primary"
+              >
+                Add provider
+              </button>
+            </div>
             <div
-              class="verticalSection"
-              is="emby-collapse"
-              title="Select Existing Provider to Modify"
+              id="sso-provider-list"
+              class="sso-provider-list paperList"
+              aria-busy="true"
             >
-              <div class="collapseContent">
-                <div class="selectContainer">
-                  <label class="selectLabel" for="selectProvider"
-                    >Name of OpenID Provider:
-                  </label>
-                  <select
-                    is="emby-select"
-                    id="selectProvider"
-                    name="selectProvider"
-                    class="emby-select-withcolor emby-select"
-                  ></select>
-                  <div class="selectArrowContainer">
-                    <div style="visibility: hidden; display: none">0</div>
-                    <span
-                      class="selectArrow material-icons keyboard_arrow_down"
-                      aria-hidden="true"
-                    ></span>
-                  </div>
-                </div>
-
+              <p class="sso-empty">Loading providers…</p>
+            </div>
+            <p id="sso-saml-note" class="sso-muted" hidden>
+              SAML providers are configured through the
+              <a
+                href="https://nekoshinobi.github.io/jellyfin-plugin-sso/configuration/"
+                >API or configuration file</a
+              >.
+            </p>
+            <div id="sso-delete-confirm" class="sso-confirm" hidden>
+              <p id="sso-delete-message"></p>
+              <div class="sso-actions">
                 <button
-                  id="LoadProvider"
-                  is="emby-button"
+                  id="ConfirmDelete"
                   type="button"
-                  class="raised button-submit block emby-button"
+                  class="emby-button raised button-delete sso-button sso-button-danger"
                 >
-                  <span>Load Provider</span>
-                </button>
-
-                <button
-                  id="DeleteProvider"
-                  is="emby-button"
+                  Delete provider</button
+                ><button
+                  id="CancelDelete"
                   type="button"
-                  class="raised button-delete block emby-button"
+                  class="emby-button raised sso-button"
                 >
-                  <span>Delete Provider</span>
+                  Cancel
                 </button>
               </div>
             </div>
-          </form>
-
-          <form id="sso-new-oidc-provider" class="esqConfigurationForm">
-            <div
-              is="emby-collapse"
-              data-expanded="true"
-              title="Add / Update Provider Configuration"
-              class="verticalSection verticalSection-extrabottompadding"
-            >
-              <div class="collapseContent">
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="OidProviderName"
-                    >Name of OpenID Provider:</label
-                  >
+          </section>
+          <form id="sso-new-oidc-provider" class="sso-editor" hidden novalidate>
+            <div class="sso-editor-heading">
+              <div>
+                <h2 id="sso-editor-title">New provider</h2>
+              </div>
+              <button
+                type="button"
+                id="CloseEditor"
+                class="emby-button button-flat sso-button sso-button-quiet"
+              >
+                Close editor
+              </button>
+            </div>
+            <div class="sso-tabs" role="tablist" aria-label="Provider settings">
+              <button
+                type="button"
+                class="sso-tab emby-button button-flat"
+                id="sso-tab-connection"
+                data-panel="connection"
+                role="tab"
+                aria-controls="sso-panel-connection"
+                aria-selected="true"
+                tabindex="0"
+              >
+                Connection</button
+              ><button
+                type="button"
+                class="sso-tab emby-button button-flat"
+                id="sso-tab-access"
+                data-panel="access"
+                role="tab"
+                aria-controls="sso-panel-access"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                Sign-in</button
+              ><button
+                type="button"
+                class="sso-tab emby-button button-flat"
+                id="sso-tab-permissions"
+                data-panel="permissions"
+                role="tab"
+                aria-controls="sso-panel-permissions"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                Permissions</button
+              ><button
+                type="button"
+                class="sso-tab emby-button button-flat"
+                id="sso-tab-profile"
+                data-panel="profile"
+                role="tab"
+                aria-controls="sso-panel-profile"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                Profile & accounts</button
+              ><button
+                type="button"
+                class="sso-tab emby-button button-flat"
+                id="sso-tab-advanced"
+                data-panel="advanced"
+                role="tab"
+                aria-controls="sso-panel-advanced"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                Advanced
+              </button>
+            </div>
+            <fieldset id="sso-editor-fields">
+              <section
+                id="sso-panel-connection"
+                class="sso-panel"
+                role="tabpanel"
+                aria-labelledby="sso-tab-connection"
+              >
+                <h3 class="sso-panel-title">Connection</h3>
+                <p class="sso-panel-description">
+                  Connect your identity provider.
+                </p>
+                <div class="sso-field inputContainer">
                   <input
+                    label="Provider name"
                     is="emby-input"
+                    class="sso-name"
+                    type="text"
                     id="OidProviderName"
-                    required=""
-                    type="text"
-                    class="sso-text"
+                    name="OidProviderName"
+                    required
+                    aria-describedby="OidProviderName-help"
+                    placeholder="e.g. authentik"
+                    autocomplete="off"
+                    spellcheck="false"
                   />
-                  <div class="fieldDescription">
-                    The name used by Jellyfin to identify the OpenID provider.
-                    <br />
-                    If an OpenID provider with a matching name does not exist, a
-                    new provider with this name will be created.
-                    <br />
-                    If an OpenID provider with a matching name already exists,
-                    the settings for that provider will be updated.
-                  </div>
+                  <p class="fieldDescription" id="OidProviderName-help">
+                    Used in sign-in URLs. Choose a name when adding a provider;
+                    existing names stay fixed to preserve links.
+                  </p>
                 </div>
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="OidEndpoint"
-                    >OpenID Endpoint:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="OidEndpoint"
-                    required=""
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The OpenID endpoint. Must have a .well-known path available.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="OidClientId"
-                    >OpenID Client ID:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="OidClientId"
-                    required=""
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The OpenID client ID, for this media server instance. This
-                    is configured on the OIDC provider to uniquely identify
-                    <strong>this</strong> Jellyfin instance.
-                  </div>
-                </div>
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="OidSecret"
-                    >OpenID client secret:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="OidSecret"
-                    required=""
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The OpenID client secret. Randomly generated & shared.
-                  </div>
-                </div>
-
                 <div
-                  class="checkboxContainer checkboxContainer-withDescription"
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
                 >
-                  <label>
-                    <input
-                      is="emby-checkbox"
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
                       id="Enabled"
                       name="Enabled"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enabled</span>
-                  </label>
+                      aria-describedby="Enabled-help"
+                    /><span class="checkboxLabel">Allow sign-in</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="Enabled-help"
+                  >
+                    Turn off to pause new sign-ins through this provider.
+                  </p>
                 </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
+                <div class="sso-field inputContainer">
+                  <input
+                    label="Issuer URL"
+                    is="emby-input"
+                    class="sso-text"
+                    type="url"
+                    id="OidEndpoint"
+                    name="OidEndpoint"
+                    required
+                    aria-describedby="OidEndpoint-help"
+                    placeholder="https://auth.example.com/application/o/jellyfin/"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <p class="fieldDescription" id="OidEndpoint-help">
+                    The OpenID Connect issuer URL from your identity provider.
+                  </p>
+                </div>
+                <div class="sso-field-grid">
+                  <div class="sso-field inputContainer">
                     <input
-                      is="emby-checkbox"
+                      label="Client ID"
+                      is="emby-input"
+                      class="sso-text"
+                      type="text"
+                      id="OidClientId"
+                      name="OidClientId"
+                      required
+                      aria-describedby="OidClientId-help"
+                      placeholder=""
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <p class="fieldDescription" id="OidClientId-help">
+                      The client registered for Jellyfin.
+                    </p>
+                  </div>
+                  <div class="sso-field inputContainer">
+                    <input
+                      label="Client secret"
+                      is="emby-input"
+                      class="sso-text"
+                      type="password"
+                      id="OidSecret"
+                      name="OidSecret"
+                      aria-describedby="OidSecret-help"
+                      placeholder=""
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <p class="fieldDescription" id="OidSecret-help">
+                      The secret issued to this client. Leave blank only if your
+                      provider supports a public client.
+                    </p>
+                  </div>
+                </div>
+                <div class="sso-field inputContainer">
+                  <label
+                    class="textareaLabel textareaLabelUnfocused"
+                    for="OidScopes"
+                    >Additional scopes</label
+                  ><textarea
+                    class="emby-textarea sso-line-list"
+                    rows="3"
+                    id="OidScopes"
+                    name="OidScopes"
+                    aria-describedby="OidScopes-help"
+                    placeholder="profile
+email
+groups"
+                  ></textarea>
+                  <p class="fieldDescription" id="OidScopes-help">
+                    One scope per line. The openid and profile scopes are always
+                    included. Add profile, email, or groups as required by your
+                    provider.
+                  </p>
+                </div>
+                <aside class="sso-note">
+                  <strong>Register your callback URL</strong>
+                  <p>
+                    Copy this address into your identity provider’s allowed
+                    redirect URLs. Use Jellyfin’s public address if you are
+                    accessing this dashboard locally.
+                  </p>
+                  <div class="sso-callback-row">
+                    <code id="sso-callback-url"></code>
+                    <button
+                      id="CopyCallbackUrl"
+                      type="button"
+                      class="emby-button button-flat sso-button sso-button-quiet sso-icon-button"
+                      title="Copy callback URL"
+                      aria-label="Copy callback URL"
+                    >
+                      <span class="material-icons" aria-hidden="true"
+                        >content_copy</span
+                      >
+                    </button>
+                  </div>
+                  <p
+                    id="sso-copy-status"
+                    hidden
+                    class="fieldDescription"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                </aside>
+              </section>
+              <section
+                id="sso-panel-access"
+                class="sso-panel"
+                role="tabpanel"
+                aria-labelledby="sso-tab-access"
+                hidden
+              >
+                <h3 class="sso-panel-title">Sign-in</h3>
+                <p class="sso-panel-description">
+                  Choose who can sign in. Set what they can do in Permissions.
+                </p>
+                <div class="sso-field inputContainer">
+                  <input
+                    label="Role claim"
+                    is="emby-input"
+                    class="sso-text"
+                    type="text"
+                    id="RoleClaim"
+                    name="RoleClaim"
+                    aria-describedby="RoleClaim-help"
+                    placeholder="groups"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <p class="fieldDescription" id="RoleClaim-help">
+                    Claim containing group or role names. Nested paths are
+                    supported, such as realm_access.roles. Use \. for a literal
+                    dot.
+                  </p>
+                </div>
+                <div class="sso-field inputContainer">
+                  <label
+                    class="textareaLabel textareaLabelUnfocused"
+                    for="Roles"
+                    >Who can sign in</label
+                  ><textarea
+                    class="emby-textarea sso-line-list"
+                    rows="3"
+                    id="Roles"
+                    name="Roles"
+                    aria-describedby="Roles-help"
+                    placeholder=""
+                  ></textarea>
+                  <p class="fieldDescription" id="Roles-help">
+                    One allowed role per line. Leave blank to admit any identity
+                    accepted by this provider.
+                  </p>
+                </div>
+              </section>
+              <section
+                id="sso-panel-permissions"
+                class="sso-panel"
+                role="tabpanel"
+                aria-labelledby="sso-tab-permissions"
+                hidden
+              >
+                <h3 class="sso-panel-title">Permissions</h3>
+                <p class="sso-panel-description">
+                  Set what everyone gets, what groups add, and exceptions for
+                  individual users. Preview the result before saving.
+                </p>
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
+                >
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
                       id="EnableAuthorization"
                       name="EnableAuthorization"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Authorization by Plugin</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines if the plugin sets permissions for the user.
-                    <br />
-                    If false, the user will start with no permissions and an
-                    administrator will add permissions.
-                    <br />
-                    The permissions of existing users will not be rewritten on
-                    subsequent logins.
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableAllFolders"
-                      name="EnableAllFolders"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable All Folders</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    If enabled, all libraries will be accessible to any user
-                    that logs in through this provider.
-                  </div>
-                </div>
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="EnabledFolders"
-                    >Enabled Folders:</label
+                      aria-describedby="EnableAuthorization-help"
+                    /><span class="checkboxLabel"
+                      >Manage Jellyfin permissions</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
                   >
-                  <div
-                    id="EnabledFolders"
-                    class="checkboxList paperList checkboxList-paperList sso-folder-list sso-bordered-list"
-                  ></div>
-                  <div class="fieldDescription">
-                    Determines which libraries will be accessible to a user that
-                    logs in through this provider.
-                    <br />
-                    If <strong>"Enable All Folders"</strong> is checked, then
-                    this has no effect.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="Roles"
-                    >Roles:</label
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="EnableAuthorization-help"
                   >
-                  <textarea
-                    is="emby-textarea"
-                    id="Roles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    If a user has any of these roles, then the user is
-                    authenticated. This validates the OpenID response against
-                    the claim set in <strong>"RoleClaim"</strong>.
-                    <br />
-                    Leave blank to disable role checking.
-                  </div>
+                    When on, each sign-in applies the settings below. When off,
+                    Jellyfin permissions are preserved for every user.
+                  </p>
                 </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="AdminRoles"
-                    >Admin Roles:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="AdminRoles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    Like <strong>"Roles"</strong>, but having any of the roles
-                    confers admin privilege.
-                    <br />
-                    If unset will not grant admin privileges.
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableFolderRoles"
-                      name="EnableFolderRoles"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Role-Based Folder Access:</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines if user roles should be used to control library
-                    access.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="FolderRoleMapping"
-                    >Folder Role Mapping:</label
-                  >
-                  <button
-                    is="emby-button"
-                    id="AddRoleMapping"
-                    type="button"
-                    class="fab btnAddFolder submit"
-                    title="${Add}"
-                  >
-                    <span class="material-icons add" aria-hidden="true"></span>
-                  </button>
-                  <div id="FolderRoleMapping" class="sso-role-map"></div>
-                  <div class="fieldDescription">
-                    Map roles (given by <strong>"Role Claim"</strong>) to lists
-                    of libraries. If a user has a given role, they will have
-                    access to the corresponding libraries. If
-                    <strong>"Enable Role-Based Folder Access"</strong> is
-                    disabled, has no effect.
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTvRoles"
-                      name="EnableLiveTvRoles"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV RBAC</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the roles will be used to grant Live TV
-                    privileges.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="LiveTvRoles"
-                    >Live TV Roles:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="LiveTvRoles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    Like <strong>"Roles"</strong>, but having any of the roles
-                    confers Live TV privileges.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="LiveTvManagementRoles"
-                    >Live TV Management Roles:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="LiveTvManagementRoles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    Like <strong>"Roles"</strong>, but having any of the roles
-                    confers Live TV administration privileges.
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTv"
-                      name="EnableLiveTv"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV Access By Default</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the user can view Live TV by default.
-                    <br />
-                    This value is still used if <strong>Live TV RBAC</strong> is
-                    enabled!
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTvManagement"
-                      name="EnableLiveTvManagement"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV Management By Default</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the user can manage Live TV by default.
-                    <br />
-                    This value is still used if <strong>Live TV RBAC</strong> is
-                    enabled!
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
-                    >Role Claim:</label
-                  >
+                <div id="sso-permission-editor"></div>
+              </section>
+              <section
+                id="sso-panel-profile"
+                class="sso-panel"
+                role="tabpanel"
+                aria-labelledby="sso-tab-profile"
+                hidden
+              >
+                <h3 class="sso-panel-title">Profile & accounts</h3>
+                <p class="sso-panel-description">
+                  Set account details and fallback sign-in.
+                </p>
+                <div class="sso-field inputContainer">
                   <input
+                    label="Username claim"
                     is="emby-input"
-                    id="RoleClaim"
-                    required=""
-                    type="text"
                     class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    This is the value in the OpenID response to check for roles.
-                    The first element is the claim type, the subsequent values
-                    are to parse the JSON of the claim value. Use a
-                    <code>"\."</code> to denote a literal ".". This expects a
-                    list of strings from the OIDC server.
-                    <br />
-                    For Keycloak, it is <code>realm_access.roles</code> by
-                    default for realm roles. For client roles, it is
-                    <code>resource_access.&gt;clientId&lt;.roles</code>
-                    (e.g. resource_access.jellyfin.roles)
-                    <br />
-                    For Authelia, it is <code>groups</code>
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="OidScopes"
-                    >Request Additional Scopes:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="OidScopes"
-                    required=""
                     type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    Specify additional scopes to include in the OIDC request.
-                    <br />
-                    One scope per line, each line should contain a scope name to
-                    include in the OIDC request.
-                    <br />
-                    For some OIDC providers (For example,
-                    <a
-                      is="emby-linkbutton"
-                      href="https://github.com/9p4/jellyfin-plugin-sso/issues/23#issuecomment-1112237616"
-                      class="button-link"
-                      >authelia</a
-                    >), additional scopes may be required in order to validate
-                    group membership in role claim.
-                    <br />
-                    Leave blank to only request the default scopes.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="DefaultProvider"
-                    >Set default Provider:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="DefaultProvider"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The set provider then gets assigned to the user after they
-                    have logged in. If it is not set, nothing is changed. With
-                    this, a user can login with SSO but is still able to log in
-                    via other providers later.<br />A common option is
-                    <code
-                      >Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider</code
-                    >
-                    for the default provider.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="DefaultUsernameClaim"
-                    >Set default username claim:</label
-                  >
-                  <input
-                    is="emby-input"
                     id="DefaultUsernameClaim"
-                    type="text"
-                    class="sso-text"
+                    name="DefaultUsernameClaim"
+                    aria-describedby="DefaultUsernameClaim-help"
+                    placeholder="preferred_username"
+                    autocomplete="off"
+                    spellcheck="false"
                   />
-                  <div class="fieldDescription">
-                    The default username claim to use from OpenID by default. If
-                    it is not set, it defaults to
-                    <code>preferred_username</code>.
-                  </div>
+                  <p class="fieldDescription" id="DefaultUsernameClaim-help">
+                    Used to match existing Jellyfin usernames and name new
+                    accounts. Saved identity links take precedence. This trusts
+                    the provider to control usernames, including those matching
+                    Jellyfin administrators.
+                  </p>
                 </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="AvatarUrlFormat"
-                    >Set avatar url format</label
-                  >
+                <div class="sso-field inputContainer">
                   <input
+                    label="Profile image URL"
                     is="emby-input"
-                    id="AvatarUrlFormat"
-                    type="text"
                     class="sso-text"
+                    type="text"
+                    id="AvatarUrlFormat"
+                    name="AvatarUrlFormat"
+                    aria-describedby="AvatarUrlFormat-help"
+                    placeholder="@{picture}"
+                    autocomplete="off"
+                    spellcheck="false"
                   />
-                  <div class="fieldDescription">
-                    The url of the avatar with sso variable format: example :
-                    <code>https://example.com/@{user_id}.png</code>
-                  </div>
+                  <p class="fieldDescription" id="AvatarUrlFormat-help">
+                    Optional HTTPS URL. Claim substitutions such as @{picture}
+                    are supported. Downloads must pass the plugin’s image and
+                    network checks.
+                  </p>
                 </div>
-
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DisableHttps"
-                      name="DisableHttps"
+                <div class="sso-field inputContainer">
+                  <input
+                    label="Fallback authentication provider"
+                    is="emby-input"
+                    class="sso-text"
+                    type="text"
+                    id="DefaultProvider"
+                    name="DefaultProvider"
+                    aria-describedby="DefaultProvider-help"
+                    placeholder=""
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <p class="fieldDescription" id="DefaultProvider-help">
+                    Optional registered Jellyfin authentication provider ID for
+                    password or LDAP sign-in. Leave blank to preserve the
+                    existing selection. New accounts use browser SSO by default.
+                  </p>
+                </div>
+                <aside class="sso-note">
+                  <strong>Keep an existing account</strong>
+                  <p>
+                    Saved username links and matching Jellyfin usernames connect
+                    automatically. If the names differ, users can sign in to
+                    Jellyfin and link from Account connections. Both paths keep
+                    the existing account and library history.
+                  </p>
+                  <a class="sso-self-service-link">Open account connections</a>
+                </aside>
+              </section>
+              <section
+                id="sso-panel-advanced"
+                class="sso-panel"
+                role="tabpanel"
+                aria-labelledby="sso-tab-advanced"
+                hidden
+              >
+                <h3 class="sso-panel-title">Advanced</h3>
+                <p class="sso-panel-description">
+                  Provider compatibility and proxy settings.
+                </p>
+                <p class="sso-muted">
+                  Change these options only when required by your identity
+                  provider or reverse proxy.
+                </p>
+                <h3>Provider compatibility</h3>
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
+                >
+                  <label class="emby-checkbox-label"
+                    ><input
                       type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Disable OpenID HTTPS Discovery (Insecure)</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription"></div>
-                </div>
-
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
+                      class="sso-toggle emby-checkbox"
                       id="DisablePushedAuthorization"
                       name="DisablePushedAuthorization"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span
-                      >Disable Pushed Authorization (Insecure). May be needed
-                      for Authelia.</span
-                    >
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription"></div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DoNotValidateEndpoints"
-                      name="DoNotValidateEndpoints"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Do Not Validate OpenID Endpoints (Insecure)</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    May be required for Google OpenID
-                  </div>
-                </div>
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DoNotValidateIssuerName"
-                      name="DoNotValidateIssuerName"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Do Not Validate OpenID Issuer Name (Insecure)</span>
-                  </label>
+                      aria-describedby="DisablePushedAuthorization-help"
+                    /><span class="checkboxLabel"
+                      >Disable pushed authorization requests</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="DisablePushedAuthorization-help"
+                  >
+                    Use the standard authorization redirect when the provider
+                    does not support PAR.
+                  </p>
                 </div>
                 <div
-                  class="checkboxContainer checkboxContainer-withDescription"
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
                 >
-                  <label>
-                    <input
-                      is="emby-checkbox"
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
                       id="DoNotLoadProfile"
                       name="DoNotLoadProfile"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Do Not Load Profile Information</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    May be required for Cloudflare OpenID
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
-                    >Scheme Override</label
+                      aria-describedby="DoNotLoadProfile-help"
+                    /><span class="checkboxLabel"
+                      >Skip the UserInfo endpoint</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
                   >
-                  <input
-                    is="emby-input"
-                    id="SchemeOverride"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    If the plugin is redirecting to an insecure URL, set this to
-                    "https"
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
-                    >Port Override</label
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="DoNotLoadProfile-help"
                   >
-                  <input
-                    is="emby-input"
-                    id="PortOverride"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    If the plugin is redirecting to an incorrect port, set this
-                    to the appropiate port
-                  </div>
+                    Use claims from the verified ID token without requesting an
+                    additional profile.
+                  </p>
                 </div>
-
-                <button
-                  id="SaveProvider"
-                  is="emby-button"
-                  type="button"
-                  class="raised button-submit block emby-button"
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
                 >
-                  <span>Save</span>
-                </button>
-              </div>
-            </div>
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
+                      id="DisableHttps"
+                      name="DisableHttps"
+                      aria-describedby="DisableHttps-help"
+                    /><span class="checkboxLabel">Allow HTTP discovery</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="DisableHttps-help"
+                  >
+                    For a trusted local setup only. HTTPS protects provider
+                    discovery and token requests.
+                  </p>
+                </div>
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
+                >
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
+                      id="DoNotValidateEndpoints"
+                      name="DoNotValidateEndpoints"
+                      aria-describedby="DoNotValidateEndpoints-help"
+                    /><span class="checkboxLabel"
+                      >Allow endpoints on other hosts</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="DoNotValidateEndpoints-help"
+                  >
+                    For providers whose discovery document uses multiple hosts.
+                    Review the endpoint addresses first.
+                  </p>
+                </div>
+                <div
+                  class="sso-toggle-row checkboxContainer checkboxContainer-withDescription"
+                >
+                  <label class="emby-checkbox-label"
+                    ><input
+                      type="checkbox"
+                      class="sso-toggle emby-checkbox"
+                      id="DoNotValidateIssuerName"
+                      name="DoNotValidateIssuerName"
+                      aria-describedby="DoNotValidateIssuerName-help"
+                    /><span class="checkboxLabel"
+                      >Relax discovery issuer-name checking</span
+                    ><span class="checkboxOutline"
+                      ><span
+                        class="material-icons checkboxIcon checkboxIcon-checked"
+                        aria-hidden="true"
+                        >check</span
+                      ></span
+                    ></label
+                  >
+                  <p
+                    class="fieldDescription checkboxFieldDescription"
+                    id="DoNotValidateIssuerName-help"
+                  >
+                    Changes discovery compatibility checking. ID token issuer
+                    validation remains enforced.
+                  </p>
+                </div>
+                <h3>Public callback address</h3>
+                <p class="sso-muted">
+                  Usually detected from Jellyfin’s trusted proxy configuration.
+                  Overrides affect the callback sent to your provider.
+                </p>
+                <div class="sso-field-grid">
+                  <div class="sso-field inputContainer">
+                    <input
+                      label="Scheme override"
+                      is="emby-input"
+                      class="sso-text"
+                      type="text"
+                      id="SchemeOverride"
+                      name="SchemeOverride"
+                      aria-describedby="SchemeOverride-help"
+                      placeholder="https"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <p class="fieldDescription" id="SchemeOverride-help">
+                      Leave blank to use the request scheme.
+                    </p>
+                  </div>
+                  <div class="sso-field inputContainer">
+                    <input
+                      label="Port override"
+                      is="emby-input"
+                      class="sso-number"
+                      type="number"
+                      id="PortOverride"
+                      name="PortOverride"
+                      aria-describedby="PortOverride-help"
+                      min="1"
+                      max="65535"
+                      step="1"
+                      placeholder="443"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <p class="fieldDescription" id="PortOverride-help">
+                      Leave blank to use the detected port.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </fieldset>
+            <footer class="sso-editor-footer">
+              <span id="sso-save-hint" class="sso-muted"
+                >Changes apply after saving.</span
+              ><button
+                id="SaveProvider"
+                type="submit"
+                class="emby-button raised button-submit sso-button sso-button-primary"
+              >
+                Save changes
+              </button>
+            </footer>
           </form>
-        </div>
+        </main>
       </div>
     </div>
   </body>

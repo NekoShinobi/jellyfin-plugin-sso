@@ -24,14 +24,14 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 **Configuration**
-Add your plugin configuration XML file here formatted as code (with three backticks surrounding the text), or as an upload to a pastebin service.
+Include only relevant, redacted settings. Remove client secrets, tokens, passwords, account mappings, and personal data. Do not upload a complete configuration file.
 
 **Versions (please complete the following information):**
 
 - OS: [e.g. Linux]
 - Browser: [e.g. chrome, safari]
-- Jellyfin Version: [e.g. 10.8 Alpha 4]
-- Plugin Version: [e.g. 2.0.1.0 or a Git tag]
+- Jellyfin Version: [e.g. 12.0]
+- Plugin Version: [e.g. 5.0.0.42 or a Git tag]
 
 **Additional context**
 Add any other context about the problem here. Was the plugin built from source?

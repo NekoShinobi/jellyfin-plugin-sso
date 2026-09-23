@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Sign-in · Jellyfin</title>
+    <link rel="stylesheet" href="{{basePath}}/web/themes/dark/theme.css" />
+    <link rel="stylesheet" href="{{basePath}}/SSOViews/style.css" />
+  </head>
+  <body class="sso-standalone">
+    <main class="sso-shell">
+      <nav class="sso-topbar" aria-label="Jellyfin">
+        <div class="sso-brand">Jellyfin</div>
+        <a href="{{basePath}}/web/">Back to Jellyfin</a>
+      </nav>
+      <section class="sso-completion">
+        <h1 id="completion-title">Finishing sign-in</h1>
+        <p id="status" role="status" aria-live="polite">Completing sign-in…</p>
+        <div class="sso-actions">
+          <a
+            id="continue"
+            class="sso-button sso-button-primary emby-button raised button-submit"
+            hidden
+            >Continue to Jellyfin</a
+          >
+        </div>
+      </section>
+    </main>
+    <script id="sso-data" type="application/json">
+      {{data}}
+    </script>
+    <script type="module" src="{{basePath}}/SSOViews/complete.js"></script>
+  </body>
+</html>

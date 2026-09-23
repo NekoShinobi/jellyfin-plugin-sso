@@ -1,23 +1,20 @@
-name: Prettier Lint
+name: Formatting
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
+permissions:
+  contents: read
 
 jobs:
   prettier:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v6
         with:
-          # Make sure the actual branch is checked out when running on pull requests
-          ref: ${{ github.head_ref }}
-      - name: Prettify code
-        uses: creyD/prettier_action@v4.3
-        with:
-          dry: True
-          prettier_options: '--check **/*.{js,html,md,css,scss}'
+          node-version: "24"
+      - run: npx --yes prettier@3.6.2 --check '**/*.{js,mjs,html,md,css,yml,yaml}'

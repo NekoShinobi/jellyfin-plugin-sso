@@ -55,7 +55,8 @@ a project may be further defined and clarified by project maintainers.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the project team at [contact@ersei.net](mailto:contact@ersei.net). All
+reported privately to the fork maintainer, [NekoShinobi](https://github.com/NekoShinobi).
+Ask for a private reporting channel without posting identifying details publicly. All
 complaints will be reviewed and investigated and will result in a response that
 is deemed necessary and appropriate to the circumstances. The project team is
 obligated to maintain confidentiality with regard to the reporter of an incident.

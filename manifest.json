@@ -1,0 +1,12 @@
+[
+  {
+    "name": "SSO Authentication",
+    "guid": "505ce9d1-d916-42fa-86ca-673ef241d7df",
+    "description": "Sign in to Jellyfin through an OpenID Connect or SAML identity provider.",
+    "overview": "Authenticate users against an SSO provider.",
+    "owner": "NekoShinobi",
+    "category": "Authentication",
+    "imageUrl": "https://raw.githubusercontent.com/NekoShinobi/jellyfin-plugin-sso/main/img/sso-icon.png",
+    "versions": []
+  }
+]

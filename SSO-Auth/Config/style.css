@@ -1,62 +1,501 @@
-.emby-textarea {
-  display: block;
+/* The dashboard uses Jellyfin's emby-* controls and active theme. Keep this
+   stylesheet limited to plugin layout and standalone-page fallbacks. */
+.sso-app,
+.sso-standalone {
+  --sso-accent: var(--jf-palette-primary-main, #00a4dc);
+  --sso-muted: var(--jf-palette-text-secondary, rgba(255, 255, 255, 0.7));
+  --sso-line: var(--jf-palette-divider, rgba(255, 255, 255, 0.12));
+  --sso-paper: var(--jf-palette-background-paper, #202020);
+}
+.sso-app {
+  max-width: 54em;
+}
+.sso-app [hidden],
+.sso-standalone [hidden] {
+  display: none !important;
+}
+.sso-app a,
+.sso-standalone a {
+  color: var(--sso-accent);
+  text-underline-offset: 0.15em;
+}
+.sso-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1em;
+}
+.sso-page-header .sectionTitle {
   margin: 0;
-  margin-bottom: 0 !important;
-
-  /* Remove select styling */
-
-  /* Font size must the 16px or larger to prevent iOS page zoom on focus */
-  font-size: inherit;
-
-  /* General select styles: change as needed */
-  font-family: inherit;
-  font-weight: inherit;
-  color: inherit;
-  padding: 0.35em 0.25em;
-
-  /* Prevent padding from causing width overflow */
-  box-sizing: border-box;
-  outline: none !important;
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-  width: 100%;
 }
-
-.emby-textarea::-moz-focus-inner {
+.sso-intro {
+  max-width: 65ch;
+  line-height: 1.5;
+}
+.sso-help-link {
+  margin-top: 0.4em;
+}
+.sso-context-bar {
+  margin: 0 0 2em;
+}
+.sso-context-bar p {
+  color: var(--sso-muted);
+}
+.sso-muted {
+  color: var(--sso-muted);
+}
+.sso-section-heading,
+.sso-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+.sso-section-heading h2,
+.sso-editor-heading h2 {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 500;
+}
+.sso-section-heading p {
+  margin: 0.5em 0 1em;
+}
+.sso-section-heading > button {
+  flex-shrink: 0;
+}
+.sso-count {
+  font-size: 0.75em;
+  font-weight: 400;
+  color: var(--sso-muted);
+}
+.sso-provider-list {
+  margin: 0.5em 0 2em;
+}
+.sso-provider-row {
+  border-bottom: 1px solid var(--sso-line);
+}
+.sso-provider-row:last-child {
+  border-bottom: 0;
+}
+.sso-provider-row.is-selected {
+  background: var(--jf-palette-action-selected, rgba(255, 255, 255, 0.08));
+}
+.sso-provider-description {
+  min-width: 0;
+}
+.sso-provider-description > p {
+  font-size: 0.9em;
+  margin: 0.3em 0 0;
+  overflow-wrap: anywhere;
+}
+.sso-provider-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8em;
+  flex-wrap: wrap;
+}
+.sso-provider-title h3 {
+  font-size: 1em;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.sso-badge {
+  color: var(--sso-muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.sso-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25em;
+  flex-wrap: wrap;
+}
+.sso-app .button-flat {
+  background: transparent;
+}
+.sso-app .emby-button:focus-visible,
+.sso-standalone a:focus-visible,
+.sso-standalone button:focus-visible {
+  outline: 2px solid var(--sso-accent) !important;
+  outline-offset: 2px;
+}
+.sso-app button:disabled,
+.sso-standalone button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.sso-app .sso-tabs {
+  display: flex;
+  gap: 0.2em;
+  flex-wrap: wrap;
+  margin: 1em 0 1.5em;
+  border-bottom: 1px solid var(--sso-line);
+}
+.sso-app .sso-tab {
+  margin: 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  font-weight: 400;
+}
+.sso-app .sso-tab[aria-selected="true"] {
+  color: var(--sso-accent);
+  border-bottom-color: var(--sso-accent);
+}
+.sso-editor {
+  margin-top: 2em;
+}
+#sso-editor-fields {
   border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
 }
-
-.textareaLabel {
+.sso-panel-title {
+  margin: 0;
+  font-size: 1.2em;
+  font-weight: 500;
+}
+.sso-panel-description {
+  color: var(--sso-muted);
+  margin: 0.5em 0 1.8em;
+}
+.sso-field {
+  min-width: 0;
+}
+.sso-field .fieldDescription {
+  margin: 0.5em 0 0;
+  line-height: 1.5;
+}
+.sso-app .textareaLabel {
   display: inline-block;
-  transition: all 0.2s ease-out;
   margin-bottom: 0.25em;
 }
-
-.emby-textarea + .fieldDescription {
+.sso-app .emby-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  display: block;
+  padding: 0.4em 0.25em;
+  font: inherit;
+  font-size: 110%;
+  resize: vertical;
+  min-height: 5em;
+}
+.sso-app .emby-checkbox-label {
+  height: auto;
+  min-height: 2.35em;
+}
+.sso-toggle-row .fieldDescription {
   margin-top: 0.25em;
 }
-
-.sso-role-mapping-container,
-.sso-bordered-list {
-  /*
-  border-color: #101010;
-  border-color: #383838;
-  */
-  border-color: rgba(255, 255, 255, 0.135);
-
-  padding-top: 0.5em;
-  border-style: solid;
-  margin-top: 0.25em;
+.sso-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5em;
 }
-.sso-role-mapping-container + .sso-role-mapping-container,
-.sso-bordered-list + .sso-bordered-list {
+.sso-folder-list {
+  display: grid;
+  gap: 0.5em;
+}
+.sso-label {
+  margin-bottom: 0.5em;
+}
+.sso-note,
+.sso-confirm {
+  background: var(--sso-paper);
+  padding: 1em;
+  margin: 1em 0;
+  border-radius: 0.2em;
+}
+.sso-note p {
+  color: var(--sso-muted);
+  line-height: 1.5;
+}
+.sso-note code {
+  display: block;
+  overflow-wrap: anywhere;
   margin-top: 1em;
 }
-
-.sso-role-mapping-container .sso-folder-list {
-  padding-left: 1em;
-  padding-bottom: 0.25em;
+.sso-confirm .sso-actions {
+  margin-top: 1em;
+}
+.sso-status {
+  padding: 1em;
+  margin: 1em 0;
+  background: var(--sso-paper);
+  border-radius: 0.2em;
+}
+.sso-status-error {
+  border-inline-start: 3px solid var(--jf-palette-error-main, #c62828);
+}
+.sso-empty {
+  padding: 1em;
+}
+.sso-empty h3 {
+  margin-top: 0;
+  font-weight: 400;
+}
+.sso-divider {
+  border-top: 1px solid var(--sso-line);
+  margin: 2em 0;
+}
+.sso-editor-footer {
+  margin-top: 2em;
+}
+.sso-editor-footer .sso-muted {
+  display: block;
+  margin-bottom: 0.75em;
+}
+.sso-editor-footer .emby-button {
+  display: block;
+  width: 100%;
+  margin: 0;
 }
 
-.sso-role-mapping-input-label {
-  padding-left: 0.5em;
+/* Standalone callbacks do not load Jellyfin's application bundle. Use its dark
+   theme stylesheet and the same basic button geometry, not a second design. */
+.sso-standalone {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--jf-palette-background-default, #101010);
+  color: var(--jf-palette-text-primary, #fff);
+  font-family: "Noto Sans", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.sso-standalone * {
+  box-sizing: border-box;
+}
+.sso-shell {
+  max-width: 54em;
+  margin: 0 auto;
+  padding: 1em 1em 4em;
+}
+.sso-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.5em 0 1.5em;
+}
+.sso-brand {
+  font-size: 1.25em;
+  font-weight: 500;
+}
+.sso-standalone h1 {
+  font-size: 1.6em;
+  font-weight: 500;
+  margin: 0.6em 0;
+}
+.sso-standalone h2 {
+  font-size: 1.2em;
+  font-weight: 400;
+  margin: 0.25em 0;
+}
+.sso-standalone .sso-intro {
+  color: var(--sso-muted);
+}
+.sso-account {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  margin: 1.5em 0;
+}
+.sso-account p {
+  margin: 0;
+}
+.sso-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.5em;
+  height: 2.5em;
+  border-radius: 50%;
+  background: var(--sso-paper);
+}
+.sso-connections {
+  border-radius: 0.2em;
+  overflow: hidden;
+}
+.sso-connection {
+  padding: 1em;
+  border-bottom: 1px solid var(--sso-line);
+  background: var(--sso-paper);
+}
+.sso-connection:last-child {
+  border-bottom: 0;
+}
+.sso-connection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+.sso-connection-header h2 {
+  overflow-wrap: anywhere;
+}
+.sso-connection-header .sso-muted {
+  margin: 0;
+  font-size: 0.85em;
+}
+.sso-connection .sso-actions {
+  margin-top: 1em;
+}
+.sso-identity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  border-top: 1px solid var(--sso-line);
+  padding-top: 0.75em;
+  margin-top: 1em;
+}
+.sso-identity-row span {
+  overflow-wrap: anywhere;
+}
+.sso-standalone .sso-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.2em;
+  padding: 0.9em 1em;
+  margin: 0.3em;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.sso-standalone .button-flat {
+  background: transparent;
+  color: inherit;
+}
+.sso-standalone .button-flat:hover {
+  color: var(--sso-accent);
+}
+.sso-page-footer {
+  margin-top: 2em;
+  color: var(--sso-muted);
+}
+.sso-page-footer p {
+  margin-bottom: 0.5em;
+}
+.sso-completion {
+  margin: 2em 0;
+}
+.sso-completion .sso-actions {
+  margin-top: 1.5em;
+}
+@media (max-width: 640px) {
+  .sso-field-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .sso-provider-row {
+    flex-wrap: wrap;
+  }
+  .sso-provider-row > .sso-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .sso-app .sso-tab {
+    font-size: 0.9em;
+    padding: 0.9em 0.6em;
+  }
+  .sso-connection-header {
+    align-items: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sso-standalone .sso-button {
+    transition: none;
+  }
+}
+
+/* Permission controls use the host's inputs, selects, buttons and theme. */
+.sso-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1.5em 2em;
+}
+.sso-permission-category {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.sso-permission-category legend {
+  font-weight: 600;
+  padding: 0 0 1em;
+}
+.sso-permission-grant {
+  display: block;
+  margin-bottom: 0.75em;
+}
+.sso-rule-add {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  flex-wrap: wrap;
+}
+.sso-rule-add .sso-field {
+  flex: 1 1 16em;
+}
+.sso-rule-editor,
+.sso-permission-preview {
+  margin-top: 2em;
+}
+.sso-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.sso-permission-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.94em;
+}
+.sso-permission-table caption {
+  text-align: left;
+  padding: 1em 0;
+}
+.sso-permission-table th,
+.sso-permission-table td {
+  padding: 0.7em;
+  border-bottom: 1px solid var(--jf-palette-divider, rgba(255, 255, 255, 0.12));
+  vertical-align: top;
+}
+.sso-permission-table th {
+  font-weight: 500;
+}
+.sso-permission-table td:nth-child(2),
+.sso-permission-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.sso-app .sso-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5em;
+}
+.sso-callback-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+.sso-callback-row code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sso-clipboard-field {
+  position: fixed;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
 }

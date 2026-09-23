@@ -1,0 +1,73 @@
+site_name: Jellyfin SSO
+site_description: Setup, configuration, and development of the Jellyfin SSO plugin.
+site_url:
+  !ENV [DOCS_SITE_URL, "https://nekoshinobi.github.io/jellyfin-plugin-sso/"]
+repo_url:
+  !ENV [DOCS_REPO_URL, "https://github.com/NekoShinobi/jellyfin-plugin-sso"]
+edit_uri: !ENV [DOCS_EDIT_URI, "edit/main/docs/"]
+docs_dir: docs
+site_dir: site
+extra_css:
+  - stylesheets/jellyfin.css
+strict: true
+theme:
+  variant: modern
+  custom_dir: docs-theme
+  icon:
+    logo: lucide/key-round
+  language: en
+  font: false
+  features:
+    - content.action.edit
+    - navigation.footer
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: lucide/sun
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: lucide/moon
+        name: Switch to light mode
+plugins:
+  - search
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - toc:
+      permalink: true
+validation:
+  invalid_links: true
+  invalid_link_anchors: true
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Initial setup: getting-started.md
+  - Configuration: configuration.md
+  - Permission rules: permissions.md
+  - Identity providers:
+      - Overview: providers/index.md
+      - Authelia: providers/authelia.md
+      - authentik: providers/authentik.md
+      - Keycloak: providers/keycloak.md
+      - Pocket ID: providers/pocket-id.md
+      - Kanidm: providers/kanidm.md
+      - Google: providers/google.md
+  - Accounts and clients: accounts-and-clients.md
+  - Migration: migration.md
+  - Troubleshooting: troubleshooting.md
+  - API reference: reference/api.md
+  - Development: development.md
+  - Releases: releases.md
+  - About: about.md

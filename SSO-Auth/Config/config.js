@@ -1,411 +1,554 @@
-const ssoConfigurationPage = {
-  pluginUniqueId: "505ce9d1-d916-42fa-86ca-673ef241d7df",
-  loadConfiguration: (page) => {
-    ApiClient.getPluginConfiguration(ssoConfigurationPage.pluginUniqueId).then(
-      (config) => {
-        ssoConfigurationPage.populateProviders(page, config.OidConfigs);
-      },
+const pluginUniqueId = "505ce9d1-d916-42fa-86ca-673ef241d7df";
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (tag === "button") {
+    node.classList.add("emby-button");
+    node.classList.add(
+      className?.includes("sso-button-quiet") ? "button-flat" : "raised",
     );
+  }
+  if (tag === "input") node.classList.add("emby-input");
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
 
-    const folder_container = page.querySelector("#EnabledFolders");
-    ssoConfigurationPage.populateFolders(folder_container);
-  },
-  populateProviders: (page, providers) => {
-    // Clear providers in case there are out of date ones
-    page
-      .querySelector("#selectProvider")
-      .querySelectorAll("option")
-      .forEach((option) => {
-        option.remove();
-      });
-
-    // Add providers as options for the selector
-
-    Object.keys(providers).forEach((provider_name) => {
-      var choice = new Option(provider_name, provider_name);
-
-      page.querySelector("#selectProvider").appendChild(choice);
-    });
-  },
-  populateEnabledFolders: (folder_list, container) => {
-    container.querySelectorAll(".folder-checkbox").forEach((e) => {
-      e.checked = folder_list.includes(e.getAttribute("data-id"));
-    });
-  },
-  serializeEnabledFolders: (container) => {
-    return [...container.querySelectorAll(".folder-checkbox")]
-      .filter((e) => e.checked)
-      .map((e) => {
-        return e.getAttribute("data-id");
-      });
-  },
-  populateFolders: (container) => {
-    return ApiClient.getJSON(
-      ApiClient.getUrl("Library/MediaFolders", {
-        IsHidden: false,
-      }),
-    ).then((folders) => {
-      ssoConfigurationPage._populateFolders(container, folders);
-    });
-  },
-  /*
-  container: html element
-  folders.Items: array of objects, with .Id & .Name
-  */
-  _populateFolders: (container, folders) => {
-    container
-      .querySelectorAll(".emby-checkbox-label")
-      .forEach((e) => e.remove());
-
-    const checkboxes = folders.Items.map((folder) => {
-      var out = document.createElement("label");
-
-      out.innerHTML = `
-        <input
-          is="emby-checkbox"
-          class="folder-checkbox chkFolder"
-          data-id="${folder.Id}"
-          type="checkbox"
-        />
-        <span>${folder.Name}</span>
-      `;
-
-      return out;
-    });
-
-    checkboxes.forEach((e) => {
-      container.appendChild(e);
-    });
-  },
-
-  populateRoleMappings: (folder_role_mappings, container) => {
-    container
-      .querySelectorAll(".sso-role-mapping-container")
-      .forEach((e) => e.remove());
-
-    const mapping_elements = folder_role_mappings.map((mapping) => {
-      var elem = document.createElement("div");
-
-      elem.classList.add("sso-role-mapping-container");
-      elem.innerHTML = `
-      <label
-        class="inputLabel inputLabelUnfocused sso-role-mapping-input-label" 
-      >Role:</label>
-      <div class="listItem">
-        <input
-          is="emby-input"
-          required=""
-          type="text"
-          class="listItemBody sso-role-mapping-name"
-        />
-        <button
-          type="button"
-          is="paper-icon-button-light"
-          class="listItemButton sso-remove-role-mapping"
-        >
-          <span class="material-icons remove_circle" aria-hidden="true"></span>
-        </button> 
-      </div> 
-      <div
-        class="checkboxList paperList sso-folder-list"
-      ></div>
-      `;
-
-      var checklist = elem.querySelector(".sso-folder-list");
-      const enabled_folders = mapping["Folders"];
-
-      ssoConfigurationPage
-        .populateFolders(checklist)
-        .then(() =>
-          ssoConfigurationPage.populateEnabledFolders(
-            enabled_folders,
-            checklist,
-          ),
-        );
-
-      elem.querySelector(".sso-role-mapping-name").value = mapping["Role"];
-      elem
-        .querySelector(".sso-remove-role-mapping")
-        .addEventListener(
-          "click",
-          ssoConfigurationPage.handleRoleMappingRemove,
-        );
-
-      return elem;
-    });
-
-    mapping_elements.forEach((e) => container.appendChild(e));
-  },
-  serializeRoleMappings: (container) => {
-    var out = [];
-    const roles = [
-      ...container.querySelectorAll(".sso-role-mapping-container"),
-    ].forEach((elem) => {
-      const role = elem.querySelector(".sso-role-mapping-name").value;
-      const checklist = elem.querySelector(".sso-folder-list");
-
-      out.push({
-        Role: role,
-        Folders: ssoConfigurationPage.serializeEnabledFolders(checklist),
-      });
-    });
-
-    return out;
-  },
-  handleRoleMappingRemove: (evt) => {
-    const targeted_mapping = evt.target.closest(".sso-role-mapping-container");
-    targeted_mapping.remove();
-  },
-  listArgumentsByType: (page) => {
-    const json_class = ".sso-json";
-    const toggle_class = ".sso-toggle";
-    const text_class = ".sso-text";
-    const text_list_class = ".sso-line-list";
-
-    const folder_list_fields = ["EnabledFolders"];
-    const role_map_fields = ["FolderRoleMapping"];
-
-    const oidc_form = page.querySelector("#sso-new-oidc-provider");
-
-    const text_fields = [...oidc_form.querySelectorAll(text_class)].map(
-      (e) => e.id,
-    );
-
-    const json_fields = [...oidc_form.querySelectorAll(json_class)].map(
-      (e) => e.id,
-    );
-
-    const text_list_fields = [
-      ...oidc_form.querySelectorAll(text_list_class),
-    ].map((e) => e.id);
-
-    const check_fields = [...oidc_form.querySelectorAll(toggle_class)].map(
-      (e) => e.id,
-    );
-
-    const output = {
-      json_fields,
-      text_list_fields,
-      text_fields,
-      check_fields,
-      folder_list_fields,
-      role_map_fields,
-    };
-
-    return output;
-  },
-  fillTextList: (text_list, element) => {
-    // text_list is an array of strings
-    // element is an input element
-    const val = text_list.join("\r\n");
-    element.value = val;
-  },
-  parseTextList: (element) => {
-    // Return the parsed text list
-    var out = element.value
-      .split("\n")
-      .map((e) => e.trim())
-      .filter((e) => e);
-    return out;
-  },
-  loadProvider: (page, provider_name) => {
-    ApiClient.getPluginConfiguration(ssoConfigurationPage.pluginUniqueId).then(
-      (config) => {
-        var provider = config.OidConfigs[provider_name] || {};
-
-        const form_elements = ssoConfigurationPage.listArgumentsByType(page);
-
-        page.querySelector("#OidProviderName").value = provider_name;
-
-        form_elements.text_fields.forEach((id) => {
-          if (provider[id]) page.querySelector("#" + id).value = provider[id];
-        });
-
-        form_elements.json_fields.forEach((id) => {
-          if (provider[id])
-            page.querySelector("#" + id).value = JSON.stringify(provider[id]);
-        });
-
-        form_elements.text_list_fields.forEach((id) => {
-          if (provider[id])
-            ssoConfigurationPage.fillTextList(
-              provider[id],
-              page.querySelector("#" + id),
-            );
-        });
-
-        form_elements.folder_list_fields.forEach((id) => {
-          if (provider[id]) {
-            ssoConfigurationPage.populateEnabledFolders(
-              provider[id],
-              page.querySelector(`#${id}`),
-            );
-          }
-        });
-
-        form_elements.check_fields.forEach((id) => {
-          if (provider[id]) page.querySelector("#" + id).checked = provider[id];
-        });
-
-        form_elements.role_map_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          if (provider[id])
-            ssoConfigurationPage.populateRoleMappings(provider[id], elem);
-        });
-      },
-    );
-  },
-  deleteProvider: (page, provider_name) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the provider ${provider_name}?`,
-      )
-    ) {
-      return;
-    }
-    return new Promise((resolve) => {
-      ApiClient.getPluginConfiguration(
-        ssoConfigurationPage.pluginUniqueId,
-      ).then((config) => {
-        if (!config.OidConfigs.hasOwnProperty(provider_name)) {
-          resolve();
-          return;
-        }
-
-        delete config.OidConfigs[provider_name];
-        ApiClient.updatePluginConfiguration(
-          ssoConfigurationPage.pluginUniqueId,
-          config,
-        ).then(function (result) {
-          Dashboard.processPluginConfigurationUpdateResult(result);
-          ssoConfigurationPage.loadConfiguration(page);
-
-          Dashboard.alert("Provider removed");
-
-          resolve();
-        });
-      });
-    });
-  },
-  saveProvider: (page, provider_name) => {
-    return new Promise((resolve) => {
-      const form_elements = ssoConfigurationPage.listArgumentsByType(page);
-
-      ApiClient.getPluginConfiguration(
-        ssoConfigurationPage.pluginUniqueId,
-      ).then((config) => {
-        var current_config = {};
-        if (config.OidConfigs.hasOwnProperty(provider_name)) {
-          current_config = config.OidConfigs[provider_name];
-        }
-
-        form_elements.text_fields.forEach((id) => {
-          const value = page.querySelector("#" + id).value;
-          if (value) {
-            current_config[id] = page.querySelector("#" + id).value;
-          } else {
-            current_config[id] = null;
-          }
-        });
-
-        form_elements.json_fields.forEach((id) => {
-          const value = page.querySelector("#" + id).value;
-          if (value) {
-            current_config[id] = JSON.parse(value);
-          } else {
-            current_config[id] = null;
-          }
-        });
-
-        form_elements.check_fields.forEach((id) => {
-          current_config[id] = page.querySelector("#" + id).checked;
-        });
-
-        form_elements.text_list_fields.forEach((id) => {
-          current_config[id] = ssoConfigurationPage.parseTextList(
-            page.querySelector("#" + id),
-          );
-        });
-
-        form_elements.folder_list_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          current_config[id] =
-            ssoConfigurationPage.serializeEnabledFolders(elem);
-        });
-
-        form_elements.role_map_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          current_config[id] = ssoConfigurationPage.serializeRoleMappings(elem);
-        });
-
-        config.OidConfigs[provider_name] = current_config;
-
-        ApiClient.updatePluginConfiguration(
-          ssoConfigurationPage.pluginUniqueId,
-          config,
-        ).then(function (result) {
-          Dashboard.processPluginConfigurationUpdateResult(result);
-          ssoConfigurationPage.loadConfiguration(page);
-          ssoConfigurationPage.loadProvider(page, provider_name);
-
-          page.querySelector("#selectProvider").value = provider_name;
-          Dashboard.alert("Settings saved.");
-          resolve();
-        });
-      });
-    });
-  },
-  addTextAreaStyle: (view) => {
-    var style = document.createElement("link");
-    style.rel = "stylesheet";
-    style.href =
-      ApiClient.getUrl("web/configurationpage") + "?name=SSO-Auth.css";
-    view.appendChild(style);
-  },
-};
+function iconButton(icon, label, extraClass = "") {
+  const button = element(
+    "button",
+    "sso-button sso-button-quiet sso-icon-button " + extraClass,
+  );
+  button.type = "button";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  const glyph = element("span", "material-icons", icon);
+  glyph.setAttribute("aria-hidden", "true");
+  button.append(glyph);
+  return button;
+}
 
 export default function (view) {
-  ssoConfigurationPage.addTextAreaStyle(view);
-  ssoConfigurationPage.loadConfiguration(view);
+  const $ = (selector) => view.querySelector(selector);
+  const form = $("#sso-new-oidc-provider");
+  const list = $("#sso-provider-list");
+  let configuration;
+  let folders = [];
+  let selected = null;
+  let pendingDelete = null;
+  let dirty = false;
+  let busy = false;
+  let permissionEditor;
+  let copyFeedbackTimer;
 
-  ssoConfigurationPage.listArgumentsByType(view);
+  const stylesheet = element("link");
+  stylesheet.rel = "stylesheet";
+  stylesheet.href = ApiClient.getUrl("web/configurationpage", {
+    name: "SSO-Auth.css",
+  });
+  view.append(stylesheet);
+  view.querySelectorAll(".sso-self-service-link").forEach((link) => {
+    link.href = ApiClient.getUrl("SSOViews/linking");
+  });
 
-  view.querySelector("#SaveProvider").addEventListener("click", (e) => {
-    const target_provider = view.querySelector("#OidProviderName").value;
+  function status(message = "", error = false) {
+    const node = $("#sso-status");
+    node.hidden = !message;
+    node.textContent = message;
+    node.classList.toggle("sso-status-error", error);
+    node.setAttribute("role", error ? "alert" : "status");
+  }
 
-    ssoConfigurationPage.saveProvider(view, target_provider);
+  function setBusy(value) {
+    busy = value;
+    $("#sso-editor-fields").disabled = value;
+    view.querySelectorAll("button").forEach((button) => {
+      button.disabled = value || button.dataset.unavailableUser === "true";
+    });
+    $("#AddProvider").disabled = value || !configuration;
+    list.setAttribute("aria-busy", String(value));
+    form.setAttribute("aria-busy", String(value));
+  }
 
-    e.preventDefault();
+  async function run(action) {
+    if (busy) return;
+    setBusy(true);
+    status();
+    try {
+      await action();
+    } catch (error) {
+      status(
+        error?.message ||
+          "Unable to save or load settings. Check your connection and try again.",
+        true,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function markDirty(value) {
+    dirty = value;
+    $("#sso-save-hint").textContent = value
+      ? "You have unsaved changes."
+      : "Changes apply after saving.";
+  }
+
+  function canLeave() {
+    return !dirty || window.confirm("Discard your unsaved provider changes?");
+  }
+
+  function tab(key, focus = false) {
+    view.querySelectorAll(".sso-tab").forEach((button) => {
+      const active = button.dataset.panel === key;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+      $("#sso-panel-" + button.dataset.panel).hidden = !active;
+      if (active && focus) button.focus();
+    });
+  }
+
+  function resetCopyFeedback() {
+    clearTimeout(copyFeedbackTimer);
+    const button = $("#CopyCallbackUrl");
+    button.querySelector(".material-icons").textContent = "content_copy";
+    button.title = "Copy callback URL";
+    button.setAttribute("aria-label", "Copy callback URL");
+  }
+
+  function callback() {
+    const name = $("#OidProviderName").value || "your-provider";
+    const url = new URL(
+      ApiClient.getUrl("sso/OID/redirect/" + encodeURIComponent(name)),
+      location.href,
+    );
+    const scheme = $("#SchemeOverride").value.trim();
+    const port = $("#PortOverride").value;
+    if (scheme === "https" || scheme === "http") url.protocol = scheme + ":";
+    if (port && Number(port) >= 1 && Number(port) <= 65535) url.port = port;
+    if ($("#sso-callback-url").textContent !== url.href) {
+      resetCopyFeedback();
+      $("#sso-copy-status").textContent = "";
+      $("#sso-copy-status").hidden = true;
+    }
+    $("#sso-callback-url").textContent = url.href;
+  }
+
+  function folderChoices(container, values = []) {
+    container.replaceChildren();
+    // Keep IDs for unavailable libraries visible so editing cannot silently remove them.
+    const choices = [...folders];
+    for (const id of values) {
+      if (!choices.some((folder) => folder.Id === id))
+        choices.push({ Id: id, Name: "Unavailable library (" + id + ")" });
+    }
+    if (!choices.length)
+      container.append(
+        element(
+          "p",
+          "sso-muted",
+          "No libraries yet. Add a library in Jellyfin to select it here.",
+        ),
+      );
+    for (const folder of choices) {
+      const label = element("label", "sso-folder-choice emby-checkbox-label");
+      const input = element("input", "folder-checkbox");
+      input.type = "checkbox";
+      input.classList.remove("emby-input");
+      input.classList.add("emby-checkbox");
+      input.dataset.id = folder.Id;
+      input.checked = values.includes(folder.Id);
+      label.append(input, element("span", "checkboxLabel", folder.Name));
+      const outline = element("span", "checkboxOutline");
+      const check = element(
+        "span",
+        "material-icons checkboxIcon checkboxIcon-checked",
+        "check",
+      );
+      check.setAttribute("aria-hidden", "true");
+      outline.append(check);
+      label.append(outline);
+      container.append(label);
+    }
+  }
+
+  function chosenFolders(container) {
+    return [...container.querySelectorAll(".folder-checkbox:checked")].map(
+      (input) => input.dataset.id,
+    );
+  }
+
+  function renderList() {
+    list.replaceChildren();
+    const providers = configuration.OidConfigs || {};
+    const names = Object.keys(providers).sort((a, b) => a.localeCompare(b));
+    $("#sso-provider-count").textContent = String(names.length);
+    $("#sso-saml-note").hidden = !Object.keys(configuration.SamlConfigs || {})
+      .length;
+    if (!names.length) {
+      const empty = element("div", "sso-empty");
+      empty.append(
+        element("h3", "", "Add your first provider"),
+        element(
+          "p",
+          "sso-muted",
+          "Connect an OpenID Connect service such as authentik, Authelia, or Keycloak to get started.",
+        ),
+      );
+      list.append(empty);
+    }
+    for (const name of names) {
+      const provider = providers[name];
+      const row = element(
+        "article",
+        "sso-provider-row listItem listItem-border",
+      );
+      row.classList.toggle("is-selected", selected === name && !form.hidden);
+      row.dataset.provider = name;
+      const badge = element(
+        "span",
+        "material-icons listItemIcon listItemIcon-transparent",
+        "account_circle",
+      );
+      badge.setAttribute("aria-hidden", "true");
+      const description = element(
+        "div",
+        "sso-provider-description listItemBody",
+      );
+      const heading = element("div", "sso-provider-title");
+      heading.append(
+        element("h3", "listItemBodyText", name),
+        element(
+          "span",
+          "sso-badge" + (provider.Enabled ? " sso-badge-active" : ""),
+          provider.Enabled ? "Enabled" : "Disabled",
+        ),
+      );
+      description.append(
+        heading,
+        element(
+          "p",
+          "sso-muted",
+          provider.OidEndpoint || "Issuer URL not configured",
+        ),
+      );
+      const actions = element("div", "sso-actions");
+      const edit = iconButton("edit", "Edit " + name);
+      edit.setAttribute("aria-controls", form.id);
+      edit.setAttribute(
+        "aria-expanded",
+        String(selected === name && !form.hidden),
+      );
+      edit.addEventListener("click", () => {
+        if (!busy && canLeave()) {
+          openEditor(name);
+          $("#sso-editor-title").scrollIntoView({ block: "nearest" });
+          $("#sso-tab-connection").focus();
+        }
+      });
+      const remove = iconButton("delete", "Delete " + name, "sso-danger-text");
+      remove.addEventListener("click", () => {
+        if (busy) return;
+        pendingDelete = name;
+        $("#sso-delete-message").textContent =
+          `Delete “${name}”? Its settings and identity links will be removed. Jellyfin accounts and watch history will remain.`;
+        $("#sso-delete-confirm").hidden = false;
+        $("#CancelDelete").focus();
+      });
+      actions.append(edit, remove);
+      row.append(badge, description, actions);
+      list.append(row);
+    }
+  }
+
+  function openEditor(name = null) {
+    selected = name;
+    const provider =
+      name === null
+        ? { Enabled: true, OidScopes: ["profile", "email"] }
+        : configuration.OidConfigs[name];
+    form.reset();
+    $("#OidProviderName").value = name ?? "";
+    $("#OidProviderName").readOnly = name !== null;
+    form.querySelectorAll(".sso-text, .sso-number").forEach((input) => {
+      input.value = provider[input.id] ?? "";
+    });
+    form.querySelectorAll(".sso-toggle").forEach((input) => {
+      input.checked = Boolean(provider[input.id]);
+    });
+    form.querySelectorAll(".sso-line-list").forEach((input) => {
+      input.value = (provider[input.id] || []).join("\n");
+    });
+    permissionEditor?.load(provider);
+    $("#sso-editor-title").textContent = name === null ? "New provider" : name;
+    $("#SaveProvider").textContent =
+      name === null ? "Create provider" : "Save changes";
+    $("#sso-delete-confirm").hidden = true;
+    form.hidden = false;
+    tab("connection");
+    callback();
+    markDirty(false);
+    renderList();
+  }
+
+  function closeEditor() {
+    selected = null;
+    form.hidden = true;
+    markDirty(false);
+    renderList();
+  }
+
+  function validate() {
+    const name = $("#OidProviderName");
+    name.setCustomValidity(!name.value.trim() ? "Enter a provider name." : "");
+    const scheme = $("#SchemeOverride");
+    scheme.setCustomValidity(
+      !scheme.value || ["https", "http"].includes(scheme.value.trim())
+        ? ""
+        : "Enter https or http, or leave this blank.",
+    );
+    const invalid = [...form.querySelectorAll("input, textarea")].find(
+      (input) => !input.validity.valid,
+    );
+    if (!invalid) return true;
+    const panel = invalid.closest("[role=tabpanel]");
+    if (panel) tab(panel.id.replace("sso-panel-", ""));
+    invalid.reportValidity();
+    invalid.focus();
     return false;
+  }
+
+  function readProvider(
+    existing = configuration?.OidConfigs?.[selected] || {},
+  ) {
+    const provider = { ...existing };
+    form.querySelectorAll(".sso-text").forEach((input) => {
+      provider[input.id] =
+        input.id === "OidSecret" ? input.value : input.value.trim();
+    });
+    form.querySelectorAll(".sso-number").forEach((input) => {
+      provider[input.id] = input.value ? Number(input.value) : null;
+    });
+    form.querySelectorAll(".sso-toggle").forEach((input) => {
+      provider[input.id] = input.checked;
+    });
+    form.querySelectorAll(".sso-line-list").forEach((input) => {
+      provider[input.id] = input.value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    });
+    Object.assign(provider, permissionEditor?.read());
+    return provider;
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (busy || !validate()) return;
+    const name = selected ?? $("#OidProviderName").value.trim();
+    run(async () => {
+      const latest = await ApiClient.getPluginConfiguration(pluginUniqueId);
+      latest.OidConfigs ||= {};
+      if (selected === null && Object.hasOwn(latest.OidConfigs, name))
+        throw new Error(
+          "A provider with this name already exists. Choose another name or edit the existing provider.",
+        );
+      if (selected !== null && !Object.hasOwn(latest.OidConfigs, name))
+        throw new Error(
+          "This provider was removed elsewhere. Reload the page before making changes.",
+        );
+      const provider = readProvider(latest.OidConfigs[name] || {});
+      Object.defineProperty(latest.OidConfigs, name, {
+        value: provider,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+      await ApiClient.updatePluginConfiguration(pluginUniqueId, latest);
+      configuration = latest;
+      const activeTab = view.querySelector('.sso-tab[aria-selected="true"]')
+        .dataset.panel;
+      openEditor(name);
+      tab(activeTab);
+      status(`Saved “${name}”. New sign-ins will use these settings.`);
+    });
   });
 
-  view.querySelector("#LoadProvider").addEventListener("click", (e) => {
-    const target_provider = view.querySelector("#selectProvider").value;
-
-    ssoConfigurationPage.loadProvider(view, target_provider);
-
-    e.preventDefault();
-    return false;
+  form.addEventListener("input", (event) => {
+    if (event.target.closest("#sso-permission-editor")) return;
+    markDirty(true);
+    callback();
+    permissionEditor?.invalidate();
   });
-
-  view.querySelector("#DeleteProvider").addEventListener("click", (e) => {
-    const target_provider = view.querySelector("#selectProvider").value;
-
-    ssoConfigurationPage.deleteProvider(view, target_provider);
-
-    e.preventDefault();
-    return false;
+  form.addEventListener("change", (event) => {
+    if (event.target.closest("#sso-permission-editor")) return;
+    markDirty(true);
+    permissionEditor?.invalidate();
   });
-
-  view.querySelector("#AddRoleMapping").addEventListener("click", (e) => {
-    const container = view.querySelector("#FolderRoleMapping");
-    const current_mappings =
-      ssoConfigurationPage.serializeRoleMappings(container);
-    current_mappings.push({ Role: "", Folders: [] });
-    console.log(current_mappings);
-    ssoConfigurationPage.populateRoleMappings(current_mappings, container);
+  $("#AddProvider").addEventListener("click", () => {
+    if (canLeave()) {
+      openEditor();
+      $("#OidProviderName").focus();
+    }
   });
+  $("#CloseEditor").addEventListener("click", () => {
+    if (canLeave()) {
+      closeEditor();
+      $("#AddProvider").focus();
+    }
+  });
+  $("#CopyCallbackUrl").addEventListener("click", async () => {
+    if (busy) return;
+    const button = $("#CopyCallbackUrl");
+    const message = $("#sso-copy-status");
+    const value = $("#sso-callback-url").textContent;
+    button.disabled = true;
+    resetCopyFeedback();
+    message.textContent = "";
+    message.hidden = true;
+    try {
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch {
+        // Jellyfin is also used over HTTP, where the Clipboard API is unavailable.
+        const field = element("textarea", "sso-clipboard-field");
+        field.value = value;
+        field.readOnly = true;
+        view.append(field);
+        try {
+          field.select();
+          if (!document.execCommand("copy"))
+            throw new Error("Copy unavailable");
+        } finally {
+          field.remove();
+        }
+      }
+      if ($("#sso-callback-url").textContent === value) {
+        button.querySelector(".material-icons").textContent = "check";
+        button.title = "Callback URL copied";
+        button.setAttribute("aria-label", "Callback URL copied");
+        copyFeedbackTimer = setTimeout(resetCopyFeedback, 2000);
+      }
+    } catch {
+      message.hidden = false;
+      message.textContent =
+        "Unable to copy. Select the callback URL and copy it manually.";
+    } finally {
+      button.disabled = false;
+      if (view.isConnected) button.focus({ preventScroll: true });
+    }
+  });
+  $("#CancelDelete").addEventListener("click", () => {
+    $("#sso-delete-confirm").hidden = true;
+    pendingDelete = null;
+    $("#AddProvider").focus();
+  });
+  $("#ConfirmDelete").addEventListener("click", () => {
+    if (!pendingDelete || !canLeave()) return;
+    const name = pendingDelete;
+    run(async () => {
+      const latest = await ApiClient.getPluginConfiguration(pluginUniqueId);
+      delete latest.OidConfigs[name];
+      await ApiClient.updatePluginConfiguration(pluginUniqueId, latest);
+      configuration = latest;
+      pendingDelete = null;
+      $("#sso-delete-confirm").hidden = true;
+      const remaining = Object.keys(configuration.OidConfigs);
+      if (selected === name || form.hidden) {
+        closeEditor();
+        if (remaining.length === 1) openEditor(remaining[0]);
+      } else renderList();
+      status(`Deleted “${name}”. Jellyfin accounts were preserved.`);
+      $("#AddProvider").focus();
+    });
+  });
+  view.querySelectorAll(".sso-tab").forEach((button, index, buttons) => {
+    button.addEventListener("click", () => tab(button.dataset.panel));
+    button.addEventListener("keydown", (event) => {
+      const targets = {
+        ArrowRight: (index + 1) % buttons.length,
+        ArrowLeft: (index + buttons.length - 1) % buttons.length,
+        Home: 0,
+        End: buttons.length - 1,
+      };
+      if (Object.hasOwn(targets, event.key)) {
+        event.preventDefault();
+        tab(buttons[targets[event.key]].dataset.panel, true);
+      }
+    });
+  });
+  const beforeUnload = (event) => {
+    if (dirty && view.isConnected) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  };
+  window.addEventListener("beforeunload", beforeUnload);
+  view.addEventListener(
+    "viewdestroy",
+    () => {
+      clearTimeout(copyFeedbackTimer);
+      window.removeEventListener("beforeunload", beforeUnload);
+    },
+    { once: true },
+  );
 
-  view.querySelector("#sso-self-service-link").href =
-    ApiClient.getUrl("/SSOViews/linking");
+  async function load() {
+    const [loaded, libraryResult, definitions, users, permissionModule] =
+      await Promise.all([
+        ApiClient.getPluginConfiguration(pluginUniqueId),
+        ApiClient.getJSON(
+          ApiClient.getUrl("Library/MediaFolders", { IsHidden: false }),
+        ),
+        ApiClient.getJSON(ApiClient.getUrl("sso/Permissions")),
+        ApiClient.getJSON(ApiClient.getUrl("Users")),
+        import(
+          ApiClient.getUrl("web/configurationpage", {
+            name: "SSO-Auth.permissions.js",
+          })
+        ),
+      ]);
+    configuration = loaded;
+    folders = libraryResult.Items || [];
+    permissionEditor = permissionModule.createPermissionEditor(
+      $("#sso-permission-editor"),
+      {
+        element,
+        definitions,
+        users,
+        folders,
+        folderChoices,
+        chosenFolders,
+        changed: () => markDirty(true),
+        readProvider,
+        preview: (request) =>
+          ApiClient.ajax({
+            type: "POST",
+            url: ApiClient.getUrl("sso/Permissions/Preview"),
+            data: JSON.stringify(request),
+            contentType: "application/json",
+            dataType: "json",
+          }),
+      },
+    );
+    configuration.OidConfigs ||= {};
+    renderList();
+    const names = Object.keys(configuration.OidConfigs);
+    if (names.length === 1) openEditor(names[0]);
+  }
+  async function initialize() {
+    await run(load);
+    if (!configuration) {
+      const retry = element("button", "sso-button", "Try again");
+      retry.type = "button";
+      retry.addEventListener("click", initialize);
+      const empty = element("div", "sso-empty");
+      empty.append(
+        element("p", "sso-muted", "Provider settings could not be loaded."),
+        retry,
+      );
+      list.replaceChildren(empty);
+    }
+  }
+  initialize();
 }

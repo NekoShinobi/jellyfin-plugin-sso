@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Synthetic values following the schema at upstream tag v3.5.2.4. -->
+<PluginConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SamlConfigs><item><key><string>Legacy-SAML</string></key><value><PluginConfiguration>
+    <SamlEndpoint>https://saml.example/login</SamlEndpoint>
+    <SamlClientId>synthetic-client</SamlClientId>
+    <SamlCertificate>c3ludGhldGljLW5vdC1hLWNlcnRpZmljYXRl</SamlCertificate>
+    <Enabled>false</Enabled><Roles/><AdminRoles xsi:nil="true"/>
+    <DefaultProvider>synthetic-ldap-provider</DefaultProvider><SchemeOverride>https</SchemeOverride><NewPath>true</NewPath>
+    <CanonicalLinks><item><key><string>legacy-saml-user</string></key><value><guid>33333333-3333-3333-3333-333333333333</guid></value></item></CanonicalLinks>
+  </PluginConfiguration></value></item></SamlConfigs>
+  <OidConfigs><item><key><string>Legacy-OIDC</string></key><value><PluginConfiguration>
+    <OidEndpoint>https://oidc.example/realm</OidEndpoint><OidClientId>synthetic-client</OidClientId><OidSecret>synthetic-3-secret</OidSecret>
+    <Enabled>true</Enabled><EnableAuthorization>true</EnableAuthorization><EnableAllFolders>false</EnableAllFolders>
+    <EnabledFolders><string>22222222222222222222222222222222</string></EnabledFolders>
+    <Roles><string>media</string></Roles><AdminRoles/><OidScopes><string>groups</string></OidScopes><RoleClaim>groups</RoleClaim>
+    <FolderRoleMappings><FolderRoleMappings><Role>library-role</Role><Folders><string>22222222222222222222222222222222</string></Folders></FolderRoleMappings></FolderRoleMappings>
+    <CanonicalLinks><item><key><string>legacy-oidc-user</string></key><value><guid>11111111-1111-1111-1111-111111111111</guid></value></item></CanonicalLinks>
+    <DefaultUsernameClaim>preferred_username</DefaultUsernameClaim><DisableHttps>false</DisableHttps><DoNotValidateEndpoints>false</DoNotValidateEndpoints><DoNotValidateIssuerName>false</DoNotValidateIssuerName>
+  </PluginConfiguration></value></item></OidConfigs>
+</PluginConfiguration>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PluginConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <SamlConfigs />
+  <OidConfigs>
+    <item>
+      <key>
+        <string>Case-Sensitive</string>
+      </key>
+      <value>
+        <PluginConfiguration>
+          <OidEndpoint>https://idp.example</OidEndpoint>
+          <OidClientId>synthetic-client</OidClientId>
+          <OidSecret>synthetic-secret</OidSecret>
+          <Enabled>false</Enabled>
+          <EnableAuthorization>false</EnableAuthorization>
+          <EnableAllFolders>false</EnableAllFolders>
+          <EnableFolderRoles>false</EnableFolderRoles>
+          <EnableLiveTvRoles>false</EnableLiveTvRoles>
+          <EnableLiveTv>false</EnableLiveTv>
+          <EnableLiveTvManagement>false</EnableLiveTvManagement>
+          <FolderRoleMappings>
+            <FolderRoleMappings>
+              <Role>library-role</Role>
+              <Folders>
+                <string>22222222222222222222222222222222</string>
+              </Folders>
+            </FolderRoleMappings>
+          </FolderRoleMappings>
+          <PortOverride xsi:nil="true" />
+          <NewPath>false</NewPath>
+          <CanonicalLinks>
+            <item>
+              <key>
+                <string>legacy-name</string>
+              </key>
+              <value>
+                <guid>11111111-1111-1111-1111-111111111111</guid>
+              </value>
+            </item>
+          </CanonicalLinks>
+          <DisableHttps>false</DisableHttps>
+          <DisablePushedAuthorization>false</DisablePushedAuthorization>
+          <DoNotValidateEndpoints>false</DoNotValidateEndpoints>
+          <DoNotValidateIssuerName>false</DoNotValidateIssuerName>
+          <DoNotLoadProfile>false</DoNotLoadProfile>
+        </PluginConfiguration>
+      </value>
+    </item>
+  </OidConfigs>
+</PluginConfiguration>

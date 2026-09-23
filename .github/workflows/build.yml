@@ -1,39 +1,137 @@
+name: Build and release
+
 on:
-  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
     inputs:
-      dotnet-version:
-        required: false
-        default: "9.0.x"
-        description: "The .NET version to setup for the build"
+      changelog:
+        description: Release notes for the GitHub release and Jellyfin manifest
+        required: true
         type: string
-      dotnet-target:
-        required: false
-        default: "net9.0"
-        description: "The .NET target to set for JPRM"
-        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
+    name: Build plugin
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || format('Build for {0}', github.sha) }}
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
       - name: Setup .NET
-        uses: actions/setup-dotnet@v1
+        uses: actions/setup-dotnet@v6.0.0
         with:
-          dotnet-version: "${{ inputs.dotnet-version }}"
-
-      - name: Build Jellyfin Plugin
-        uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
-        id: jprm
+          dotnet-version: "10.0.x"
+      - name: Setup Python
+        uses: actions/setup-python@v6
         with:
-          dotnet-target: "${{ inputs.dotnet-target }}"
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # tag=v4.6.2
+          python-version: "3.13"
+      - name: Check frontend syntax
+        run: |
+          node --check SSO-Auth/Config/config.js
+          node --check SSO-Auth/Config/linking.js
+          node --check SSO-Auth/Views/web.js
+          node --check SSO-Auth/Views/complete.js
+          node --test tests/*.test.mjs
+      - name: Test release tooling
+        run: python3 -m unittest discover -s tests -v
+      - name: Calculate build version
+        id: version
+        run: |
+          version="$(python3 scripts/release.py version --run-number "$GITHUB_RUN_NUMBER")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet build SSO-Auth.sln -c Release --warnaserror -p:Version="$VERSION"
+          dotnet test SSO-Auth.sln -c Release --no-build --no-restore
+          printf '%s\n' "$CHANGELOG" > "$RUNNER_TEMP/release-notes.md"
+          python3 scripts/release.py package --version "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+      - name: Test packaged plugin on supported hosts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm install --prefix "$RUNNER_TEMP/sso-browser" playwright@1.56.0
+          python3 tests/host_smoke.py --archive "dist/SSO-Auth_${VERSION}.zip" --playwright "$RUNNER_TEMP/sso-browser"
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v7.0.1
         with:
-          name: build-artifact
-          retention-days: 30
+          name: sso-auth-${{ steps.version.outputs.version }}
+          path: dist/
           if-no-files-found: error
-          path: ${{ steps.jprm.outputs.artifact }}
+          retention-days: 30
+
+  release:
+    name: Publish release
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CHANGELOG: ${{ inputs.changelog || github.event.head_commit.message || format('Automated release for {0}', github.sha) }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Check out build revision
+        uses: actions/checkout@v7.0.1
+      - name: Download release artifact
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: sso-auth-${{ needs.build.outputs.version }}
+          path: dist
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$CHANGELOG" > "$RUNNER_TEMP/release-notes.md"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/*.zip dist/*.zip.md5 dist/*.zip.sha256 --clobber
+            gh release edit "$VERSION" --title "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$VERSION" dist/*.zip dist/*.zip.md5 dist/*.zip.sha256 \
+              --target "$GITHUB_SHA" --title "$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+      - name: Update plugin manifest on main
+        run: |
+          set -euo pipefail
+          # Keep the release script from the build revision; update only the current catalog.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git restore --source=origin/main --staged --worktree manifest.json
+            python3 scripts/release.py manifest --archive "dist/SSO-Auth_${VERSION}.zip" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+            # Commit on the latest main without replacing the checked-out release tooling.
+            index_file="$(mktemp)"
+            rm "$index_file"
+            export GIT_INDEX_FILE="$index_file"
+            git read-tree origin/main
+            git add manifest.json
+            tree="$(git write-tree)"
+            unset GIT_INDEX_FILE
+            rm "$index_file"
+            if [ "$tree" = "$(git rev-parse 'origin/main^{tree}')" ]; then
+              exit 0
+            fi
+            commit="$(git commit-tree "$tree" -p origin/main -m "chore: add $VERSION to plugin manifest [skip ci]")"
+            if git push origin "$commit:refs/heads/main"; then
+              exit 0
+            fi
+          done
+          echo 'Catalog update failed after three attempts; rerun the release job.' >&2
+          exit 1

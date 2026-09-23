@@ -1,0 +1,49 @@
+/* Jellyfin palette: https://github.com/jellyfin/jellyfin-ux/tree/master/logos/SVG */
+:root {
+  --jellyfin-cyan: #00a4dc;
+  --jellyfin-purple: #aa5cc3;
+}
+
+[data-md-color-scheme="default"] {
+  /* Darker brand shades keep text readable on light surfaces. */
+  --md-primary-fg-color: #00769e;
+  --md-primary-fg-color--light: var(--jellyfin-cyan);
+  --md-primary-fg-color--dark: #005875;
+  --md-accent-fg-color: #86419d;
+  --md-accent-fg-color--transparent: #aa5cc31a;
+  --md-typeset-a-color: var(--md-primary-fg-color);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--jellyfin-cyan);
+  --md-primary-fg-color--light: #54c8ee;
+  --md-primary-fg-color--dark: #00769e;
+  --md-accent-fg-color: #ca8ede;
+  --md-accent-fg-color--transparent: #aa5cc326;
+  --md-default-bg-color: #101114;
+  --md-default-bg-color--light: #101114b3;
+  --md-default-bg-color--lighter: #1011144d;
+  --md-default-bg-color--lightest: #10111412;
+  --md-code-bg-color: #1c1e24;
+  --md-typeset-a-color: var(--jellyfin-cyan);
+}
+
+.md-header::before {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(
+    110deg,
+    var(--jellyfin-purple),
+    var(--jellyfin-cyan)
+  );
+}
+
+.md-header .md-logo {
+  color: var(--md-primary-fg-color);
+}
+
+.md-typeset a:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 3px;
+}
