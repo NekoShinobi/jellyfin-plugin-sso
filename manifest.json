@@ -7,6 +7,15 @@
     "owner": "NekoShinobi",
     "category": "Authentication",
     "imageUrl": "https://raw.githubusercontent.com/NekoShinobi/jellyfin-plugin-sso/main/img/sso-icon.png",
-    "versions": []
+    "versions": [
+      {
+        "version": "5.0.0.4",
+        "targetAbi": "12.0.0.0",
+        "changelog": "Forward WebSockets in test proxy and keep a live session for host restriction checks\n",
+        "checksum": "968374DEC7F487CF607DEB2367E1F28D",
+        "sourceUrl": "https://github.com/NekoShinobi/jellyfin-plugin-sso/releases/download/5.0.0.4/SSO-Auth_5.0.0.4.zip",
+        "timestamp": "2026-09-23T06:08:39Z"
+      }
+    ]
   }
 ]
