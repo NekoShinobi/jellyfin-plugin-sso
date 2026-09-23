@@ -100,6 +100,8 @@ test("malformed and inaccessible storage fail visibly", () => {
         { Id: "a" },
         { ServerId: "b" },
         "https://example",
+        // Explicit storage: Node before 25 has no global localStorage.
+        { setItem: () => assert.fail("rejected logins must not be stored") },
       ),
     /unexpected/,
   );
