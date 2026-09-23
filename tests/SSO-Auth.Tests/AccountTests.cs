@@ -21,6 +21,7 @@ using MediaBrowser.Model.Users;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using ImageInfo = Jellyfin.Database.Implementations.Entities.ImageInfo;
 
 namespace SSO_Auth.Tests;
 
@@ -169,6 +170,76 @@ public class AccountTests
             var settings = Store.Get(mode, "test");
             return new(new(mode, "test", "https://jf/callback", "browser", target, ConfigurationMigration.Fingerprint(settings), settings), identity ?? Identity);
         }
+    }
+
+    [Theory]
+    [InlineData("OID")]
+    [InlineData("SAML")]
+    public async Task SuccessfulSignInRepairsLegacyAvatarWithoutAnAvatarUrl(string mode)
+    {
+        var f = new Fixture(); var user = f.AddUser(f.Identity.DisplayName);
+        const string original = "/synthetic/user/profilepng";
+        const string repaired = "/synthetic/user/profile-recovered.png";
+        user.ProfileImage = new ImageInfo(original);
+        f.Avatars.Setup(a => a.RepairLegacy(user.Id, original, It.IsAny<Func<string, Task<bool>>>()))
+            .Returns(async (Guid id, string? path, Func<string, Task<bool>> save) => Assert.True(await save(repaired)));
+        await f.Service.Login(f.Completion(mode: mode), f.Client, "127.0.0.1");
+        Assert.Equal(repaired, user.ProfileImage.Path);
+        f.Avatars.Verify(a => a.RepairLegacy(user.Id, original, It.IsAny<Func<string, Task<bool>>>()), Times.Once);
+        f.Avatars.Verify(a => a.Refresh(user.Id, null, It.IsAny<Func<string, Task>>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LegacyAvatarRepairCannotRestoreDeletedAccountsOrReplaceNewerAvatars(bool deleted)
+    {
+        var f = new Fixture(); var user = f.AddUser(f.Identity.DisplayName);
+        user.ProfileImage = new ImageInfo("/synthetic/user/profilepng");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Avatars.Setup(a => a.RepairLegacy(user.Id, user.ProfileImage.Path, It.IsAny<Func<string, Task<bool>>>()))
+            .Returns(async (Guid id, string? path, Func<string, Task<bool>> save) =>
+            {
+                entered.SetResult();
+                await release.Task;
+                Assert.False(await save("/synthetic/user/profile-recovered.png"));
+            });
+        var login = f.Service.Login(f.Completion(), f.Client, "127.0.0.1");
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (deleted) f.All.Remove(user);
+            else user.ProfileImage = new ImageInfo("/synthetic/manual-avatar.png");
+            f.Users.Invocations.Clear();
+            release.SetResult();
+            await login.WaitAsync(TimeSpan.FromSeconds(5));
+            f.Users.Verify(u => u.UpdateUserAsync(It.IsAny<User>()), Times.Never);
+            if (!deleted) Assert.Equal("/synthetic/manual-avatar.png", user.ProfileImage.Path);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await login;
+        }
+    }
+
+    [Fact]
+    public async Task FailedAvatarMetadataSaveRestoresTheOriginalInMemoryReference()
+    {
+        var f = new Fixture(); var user = f.AddUser(f.Identity.DisplayName);
+        var original = new ImageInfo("/synthetic/user/profilepng");
+        user.ProfileImage = original;
+        f.Users.Setup(u => u.UpdateUserAsync(It.Is<User>(u => u.ProfileImage != null && u.ProfileImage.Path.EndsWith(".png"))))
+            .ThrowsAsync(new IOException("Synthetic metadata failure"));
+        f.Avatars.Setup(a => a.RepairLegacy(user.Id, original.Path, It.IsAny<Func<string, Task<bool>>>()))
+            .Returns(async (Guid id, string? path, Func<string, Task<bool>> save) =>
+            {
+                await Assert.ThrowsAsync<IOException>(() => save("/synthetic/user/profile-recovered.png"));
+            });
+        await f.Service.Login(f.Completion(), f.Client, "127.0.0.1");
+        Assert.Same(original, user.ProfileImage);
+        f.Avatars.Verify(a => a.Refresh(user.Id, null, It.IsAny<Func<string, Task>>()), Times.Once);
     }
 
     [Theory]

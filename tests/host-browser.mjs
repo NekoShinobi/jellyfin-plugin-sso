@@ -276,6 +276,34 @@ try {
     if (!localStorage.getItem("layout"))
       localStorage.setItem("layout", "modern");
   });
+  if (state.avatarRecovery) {
+    const originalIdentity = identity;
+    identity = {
+      ...identity,
+      sub: "avatar-recovery-subject",
+      preferred_username: "avatar-recovery-user",
+    };
+    const recovered = await login();
+    assert.equal(
+      recovered.User.Id.replaceAll("-", ""),
+      state.avatarRecovery.userId.replaceAll("-", ""),
+    );
+    const avatar = await fetch(
+      base + "/UserImage?userId=" + recovered.User.Id + "&format=png",
+    );
+    assert.equal(
+      avatar.status,
+      200,
+      "Recovered avatar must render through Jellyfin",
+    );
+    assert.match(avatar.headers.get("content-type"), /^image\/png/);
+    assert.deepEqual(
+      new Uint8Array(await avatar.arrayBuffer()).slice(0, 8),
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    await login(); // A second sign-in must keep the same recovery copy.
+    identity = originalIdentity;
+  }
   const first = await login();
   if (state.proxy)
     assert.equal(first.SessionInfo.RemoteEndPoint, "203.0.113.44");

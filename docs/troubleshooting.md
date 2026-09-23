@@ -120,3 +120,20 @@ Jellyfin 12's own `SessionManager` currently writes the access token when loggin
 out a session. The plugin does not emit tokens or raw assertions. Treat full host
 logs as sensitive and redact them before sharing. This host behavior is outside
 the plugin's logger; see [the host implementation](https://github.com/jellyfin/jellyfin/blob/v12.0/Emby.Server.Implementations/Session/SessionManager.cs).
+
+## Avatar error mentioning `profilepng`
+
+An error such as `Unable to encode image due to unsupported format: .../profilepng`
+can come from an older SSO version that omitted the dot in the filename. The
+file may contain a valid PNG; its stored path is the problem.
+
+The plugin repairs these known legacy names on the next successful SSO sign-in,
+including when avatar downloading is disabled. It validates a copy, updates
+Jellyfin's stored reference, and preserves the original file. A concurrent avatar
+change is preserved. The first login may still display the old avatar briefly
+before repair completes; reload the page afterwards.
+
+If repair cannot validate the image or access its file, it leaves the reference
+unchanged and logs a redacted recovery warning. A successful configured avatar
+download can replace it, or re-upload the avatar through Jellyfin's profile-image
+editor. That updates both the filename and the stored reference.

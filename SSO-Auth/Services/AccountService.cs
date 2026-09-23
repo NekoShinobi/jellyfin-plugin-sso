@@ -147,24 +147,36 @@ public sealed class AccountService(ProviderStore providers, IUserManager users, 
             _gate.Release();
         }
 
+        var previousAvatar = user.ProfileImage?.Path;
+        await avatars.RepairLegacy(user.Id, previousAvatar, path => UpdateAvatar(user.Id, path, previousAvatar)).ConfigureAwait(false);
         await avatars.Refresh(user.Id, completion.Identity.AvatarUrl, path => UpdateAvatar(user.Id, path)).ConfigureAwait(false);
         return result;
     }
 
-    private async Task UpdateAvatar(Guid userId, string path)
+    private async Task<bool> UpdateAvatar(Guid userId, string path, string? expectedPath = null)
     {
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
             // A download can outlive another login or account edit. Never persist its old user snapshot.
             var current = users.GetUserById(userId);
-            if (current is null)
+            if (current is null || (expectedPath is not null && current.ProfileImage?.Path != expectedPath))
             {
-                return;
+                return false;
             }
 
+            var previous = current.ProfileImage;
             current.ProfileImage = new ImageInfo(path);
-            await users.UpdateUserAsync(current).ConfigureAwait(false);
+            try
+            {
+                await users.UpdateUserAsync(current).ConfigureAwait(false);
+                return true;
+            }
+            catch
+            {
+                current.ProfileImage = previous;
+                throw;
+            }
         }
         finally
         {

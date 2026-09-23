@@ -228,3 +228,17 @@ Avatar downloads are optional HTTPS requests with a five-second deadline, a 2 Mi
 body limit, and a 4096 × 4096 image limit. Only public addresses and PNG/JPEG/WebP
 images are accepted; redirects, proxies, and private/loopback addresses are rejected.
 Image failures do not prevent login.
+
+On successful SSO sign-in, the plugin also repairs known legacy avatar filenames
+(`profilepng`, `profilejpg`, `profilejpeg`, and `profilewebp`). It checks the file
+contents and image dimensions, saves a correctly named copy, and updates the
+account's image reference only if the original reference is still current. The
+original file is kept. This local repair works even when `AvatarUrlFormat` is
+empty or the identity provider is unavailable, and it runs once per affected
+image rather than on every login.
+
+Recovery is limited to files directly inside user folders under Jellyfin's user
+configuration directory. Symlinks, unsupported formats, oversized files, and
+undecodable images are not migrated. Missing or genuinely damaged images can
+still be replaced by a successful normal avatar download. Failed repair leaves
+the existing reference intact and does not block sign-in.

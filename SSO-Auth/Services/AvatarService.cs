@@ -18,10 +18,14 @@ namespace Jellyfin.Plugin.SSO_Auth.Services;
 public interface IAvatarService
 {
     Task Refresh(Guid userId, string? url, Func<string, Task> saveProfileImage);
+
+    // Existing implementations can keep download-only behavior.
+    Task RepairLegacy(Guid userId, string? currentPath, Func<string, Task<bool>> trySaveProfileImage) => Task.CompletedTask;
 }
 
 public sealed class AvatarService(IImageEncoder decoder, IProviderManager images, IServerConfigurationManager server, IHttpClientFactory clients, ILogger<AvatarService> logger) : IAvatarService
 {
+    private const int MaxImageBytes = 2 * 1024 * 1024;
     private readonly object _refreshGate = new();
     private readonly Dictionary<Guid, RefreshLock> _refreshes = new();
 
@@ -57,6 +61,22 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
             return;
         }
 
+        await ForUser(userId, () => RefreshCore(userId, url, saveProfileImage)).ConfigureAwait(false);
+    }
+
+    public async Task RepairLegacy(Guid userId, string? currentPath, Func<string, Task<bool>> trySaveProfileImage)
+    {
+        if (string.IsNullOrEmpty(currentPath)
+            || Path.GetFileName(currentPath).ToLowerInvariant() is not ("profilepng" or "profilejpg" or "profilejpeg" or "profilewebp"))
+        {
+            return;
+        }
+
+        await ForUser(userId, () => RepairLegacyCore(userId, currentPath, trySaveProfileImage)).ConfigureAwait(false);
+    }
+
+    private async Task ForUser(Guid userId, Func<Task> action)
+    {
         RefreshLock entry;
         lock (_refreshGate)
         {
@@ -72,7 +92,7 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
         await entry.Semaphore.WaitAsync().ConfigureAwait(false);
         try
         {
-            await RefreshCore(userId, url, saveProfileImage).ConfigureAwait(false);
+            await action().ConfigureAwait(false);
         }
         finally
         {
@@ -101,45 +121,21 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            const int limit = 2 * 1024 * 1024;
-            if (response.Content.Headers.ContentLength > limit)
+            if (response.Content.Headers.ContentLength > MaxImageBytes)
             {
                 throw new InvalidOperationException();
             }
 
             await using var input = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
-            using var output = new MemoryStream();
-            var buffer = new byte[8192];
-            int count;
-            while ((count = await input.ReadAsync(buffer, timeout.Token).ConfigureAwait(false)) != 0)
-            {
-                if (output.Length + count > limit)
-                {
-                    throw new InvalidOperationException();
-                }
-
-                output.Write(buffer, 0, count);
-            }
-
-            var bytes = output.ToArray();
-            var format = bytes.Length > 12 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
-                ? (Mime: "image/png", Extension: "png")
-                : bytes.Length > 3 && bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255
-                    ? (Mime: "image/jpeg", Extension: "jpg")
-                    : bytes.Length > 12 && System.Text.Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP"
-                        ? (Mime: "image/webp", Extension: "webp")
-                        : throw new InvalidOperationException();
+            var bytes = await ReadImage(input, timeout.Token).ConfigureAwait(false);
+            var format = ImageFormat(bytes);
             var directory = Path.Combine(server.ApplicationPaths.UserConfigurationDirectoryPath, userId.ToString("N"));
             Directory.CreateDirectory(directory);
             var temporary = Path.Combine(directory, Guid.NewGuid().ToString("N") + "." + format.Extension);
             try
             {
                 await File.WriteAllBytesAsync(temporary, bytes, timeout.Token).ConfigureAwait(false);
-                var dimensions = decoder.GetImageSize(temporary);
-                if (dimensions.Width <= 0 || dimensions.Height <= 0 || dimensions.Width > 4096 || dimensions.Height > 4096)
-                {
-                    throw new InvalidOperationException();
-                }
+                ValidateImage(temporary);
             }
             finally
             {
@@ -147,7 +143,7 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
             }
 
             var path = Path.Combine(directory, "profile." + format.Extension);
-            output.Position = 0;
+            using var output = new MemoryStream(bytes, writable: false);
             await images.SaveImage(output, format.Mime, path).ConfigureAwait(false);
             await saveProfileImage(path).ConfigureAwait(false);
         }
@@ -155,6 +151,110 @@ public sealed class AvatarService(IImageEncoder decoder, IProviderManager images
         {
             // No URL, claims, or response body in logs; optional images never fail login.
             logger.LogWarning("SSO avatar refresh failed validation or download.");
+        }
+    }
+
+    private async Task RepairLegacyCore(Guid userId, string currentPath, Func<string, Task<bool>> trySaveProfileImage)
+    {
+        string? repaired = null;
+        var created = false;
+        try
+        {
+            var root = Path.GetFullPath(server.ApplicationPaths.UserConfigurationDirectoryPath);
+            var source = Path.GetFullPath(currentPath);
+            var relative = Path.GetRelativePath(root, source);
+            var parts = relative.Split(Path.DirectorySeparatorChar);
+            // Legacy avatars were directly inside a user folder. Never follow a
+            // stored path outside that root or through a file/directory symlink.
+            if (Path.IsPathRooted(relative) || parts.Length != 2 || parts[0] is "." or ".."
+                || (File.GetAttributes(Path.GetDirectoryName(source)!) & FileAttributes.ReparsePoint) != 0
+                || (File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+            {
+                return;
+            }
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            byte[] bytes;
+            await using (var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, useAsync: true))
+            {
+                bytes = await ReadImage(input, timeout.Token).ConfigureAwait(false);
+            }
+
+            var format = ImageFormat(bytes);
+            var directory = Path.Combine(root, userId.ToString("N"));
+            if (new DirectoryInfo(directory).LinkTarget is not null)
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(directory);
+            repaired = Path.Combine(directory, "profile-recovered-" + Guid.NewGuid().ToString("N") + "." + format.Extension);
+            await using (var output = new FileStream(repaired, FileMode.CreateNew, FileAccess.Write, FileShare.None, 8192, useAsync: true))
+            {
+                created = true;
+                await output.WriteAsync(bytes, timeout.Token).ConfigureAwait(false);
+            }
+
+            ValidateImage(repaired);
+            if (await trySaveProfileImage(repaired).ConfigureAwait(false))
+            {
+                // Keep the original for recovery. Only the account's reference changes.
+                repaired = null;
+            }
+        }
+        catch (Exception)
+        {
+            logger.LogWarning("SSO legacy avatar recovery failed validation or persistence; the original image was preserved.");
+        }
+        finally
+        {
+            if (created && repaired is not null)
+            {
+                try
+                {
+                    File.Delete(repaired);
+                }
+                catch (Exception)
+                {
+                    logger.LogWarning("SSO could not remove an unused avatar recovery copy.");
+                }
+            }
+        }
+    }
+
+    private static async Task<byte[]> ReadImage(Stream input, CancellationToken cancellation)
+    {
+        using var output = new MemoryStream();
+        var buffer = new byte[8192];
+        int count;
+        while ((count = await input.ReadAsync(buffer, cancellation).ConfigureAwait(false)) != 0)
+        {
+            if (output.Length + count > MaxImageBytes)
+            {
+                throw new InvalidOperationException();
+            }
+
+            output.Write(buffer, 0, count);
+        }
+
+        return output.ToArray();
+    }
+
+    private static (string Mime, string Extension) ImageFormat(byte[] bytes) =>
+        bytes.Length > 12 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })
+            ? ("image/png", "png")
+            : bytes.Length > 3 && bytes[0] == 255 && bytes[1] == 216 && bytes[2] == 255
+                ? ("image/jpeg", "jpg")
+                : bytes.Length > 12 && System.Text.Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP"
+                    ? ("image/webp", "webp")
+                    : throw new InvalidOperationException();
+
+    private void ValidateImage(string path)
+    {
+        var dimensions = decoder.GetImageSize(path);
+        if (dimensions.Width <= 0 || dimensions.Height <= 0 || dimensions.Width > 4096 || dimensions.Height > 4096)
+        {
+            throw new InvalidOperationException();
         }
     }
 
