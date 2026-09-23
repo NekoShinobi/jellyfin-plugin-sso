@@ -226,10 +226,13 @@ try {
     assert.equal(response.status(), 200, "SSO completion rejected");
     const result = lastAuthentication.body;
     await page.waitForURL("**/web/**", { timeout: 20000 });
-    await page.waitForFunction(() =>
-      JSON.parse(localStorage.getItem("jellyfin_credentials")).Servers.some(
-        (s) => s.AccessToken,
-      ),
+    // Wait for this sign-in's token; other saved servers may already have one.
+    await page.waitForFunction(
+      (token) =>
+        JSON.parse(localStorage.getItem("jellyfin_credentials")).Servers.some(
+          (s) => s.AccessToken === token,
+        ),
+      result.AccessToken,
     );
     const credentials = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("jellyfin_credentials")),
@@ -260,6 +263,8 @@ try {
     "stable subject preserves user GUID after external rename",
   );
   // Keep unrelated server credentials while signing into this server.
+  // Inject them outside the web client, which rewrites storage from its in-memory copy.
+  await page.goto(base + "/System/Info/Public");
   await page.evaluate(() => {
     const c = JSON.parse(localStorage.getItem("jellyfin_credentials"));
     c.Servers.push({
